@@ -164,6 +164,14 @@ export default function LeadDetail() {
     fetchActivities()
   }
 
+  const handleUpdateActivity = (updated) => {
+    setActivities(prev => prev.map(a => a.id === updated.id ? updated : a))
+  }
+
+  const handleDeleteActivity = (actId) => {
+    setActivities(prev => prev.filter(a => a.id !== actId))
+  }
+
   const handleDelete = async () => {
     if (!confirm(`Delete ${lead.first_name} ${lead.last_name}? This cannot be undone.`)) return
     await supabase.from('activities').delete().eq('lead_id', id)
@@ -353,52 +361,18 @@ export default function LeadDetail() {
             </div>
 
             {activities.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', paddingTop: 24 }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-3)', textAlign: 'center', paddingTop: 24 }}>
                 No activity logged yet
               </div>
             ) : (
-              activities.map(a => {
-                const aType = ACTIVITY_TYPES.find(t => t.id === a.type) || ACTIVITY_TYPES[0]
-                return (
-                  <div key={a.id} style={{
-                    borderLeft: `3px solid ${aType.color}`,
-                    background: 'var(--color-bg)',
-                    border: '1px solid var(--color-border)',
-                    borderLeftWidth: 3,
-                    borderRadius: '0 6px 6px 0',
-                    padding: '10px 12px',
-                    marginBottom: 10,
-                    animation: 'fadeIn 0.2s ease',
-                  }}>
-                    {/* Header: icon + badge + author */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <ActivityIcon type={a.type} />
-                        <span style={{
-                          fontSize: 9, fontWeight: 800, letterSpacing: '0.5px',
-                          textTransform: 'uppercase', color: aType.color,
-                          background: `${aType.color}18`, padding: '1px 5px', borderRadius: 3,
-                        }}>
-                          {aType.label}
-                        </span>
-                        {a.author && (
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
-                            {a.author}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {/* Body */}
-                    <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                      {a.body}
-                    </div>
-                    {/* Timestamp */}
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
-                      {a.created_at ? format(parseISO(a.created_at), "MMM d, yyyy '·' h:mm a") : ''}
-                    </div>
-                  </div>
-                )
-              })
+              activities.map(a => (
+                <ActivityEntry
+                  key={a.id}
+                  activity={a}
+                  onUpdate={handleUpdateActivity}
+                  onDelete={handleDeleteActivity}
+                />
+              ))
             )}
           </div>
         </div>
@@ -407,7 +381,226 @@ export default function LeadDetail() {
   )
 }
 
-const dash = <span style={{ color: 'var(--text-muted)' }}>—</span>
+function ActivityEntry({ activity: a, onUpdate, onDelete }) {
+  const toast = useToast()
+  const aType = ACTIVITY_TYPES.find(t => t.id === a.type) || ACTIVITY_TYPES[0]
+  const isTemp = String(a.id).startsWith('tmp_')
+
+  const [hovered,    setHovered]    = useState(false)
+  const [editing,    setEditing]    = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [editBody,   setEditBody]   = useState(a.body   || '')
+  const [editAuthor, setEditAuthor] = useState(a.author || '')
+  const [saving,     setSaving]     = useState(false)
+
+  const handleSave = async () => {
+    if (!editBody.trim()) return
+    setSaving(true)
+    const { error } = await supabase
+      .from('activities')
+      .update({ body: editBody.trim(), author: editAuthor.trim() || null })
+      .eq('id', a.id)
+    setSaving(false)
+    if (error) { toast('Failed to update entry', 'error'); return }
+    onUpdate({ ...a, body: editBody.trim(), author: editAuthor.trim() || a.author })
+    setEditing(false)
+  }
+
+  const handleCancelEdit = () => {
+    setEditBody(a.body || '')
+    setEditAuthor(a.author || '')
+    setEditing(false)
+  }
+
+  const handleDelete = async () => {
+    const { error } = await supabase.from('activities').delete().eq('id', a.id)
+    if (error) { toast('Failed to delete entry', 'error'); return }
+    onDelete(a.id)
+  }
+
+  const iconBtn = (onClick, title, path) => (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        background: 'none', border: 'none', cursor: 'pointer',
+        padding: '2px 4px', borderRadius: 4,
+        color: 'var(--color-text-3)', display: 'flex', alignItems: 'center',
+        transition: 'color 0.1s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.color = 'var(--color-accent)'}
+      onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-3)'}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        {path}
+      </svg>
+    </button>
+  )
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        borderLeft: `3px solid ${aType.color}`,
+        background: 'var(--color-bg)',
+        border: '1px solid var(--color-border)',
+        borderLeftWidth: 3,
+        borderRadius: '0 6px 6px 0',
+        padding: '10px 12px',
+        marginBottom: 10,
+        animation: 'fadeIn 0.2s ease',
+      }}
+    >
+      {/* Header row: type badge + author + action icons */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: editing ? 8 : 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ActivityIcon type={a.type} />
+          <span style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: '0.5px',
+            textTransform: 'uppercase', color: aType.color,
+            background: `${aType.color}18`, padding: '1px 5px', borderRadius: 3,
+          }}>
+            {aType.label}
+          </span>
+          {!editing && a.author && (
+            <span style={{ fontSize: 11, color: 'var(--color-text-2)', fontWeight: 600 }}>
+              {a.author}
+            </span>
+          )}
+        </div>
+
+        {/* Edit / Delete icons — visible on hover, not in edit/confirm/temp mode */}
+        {hovered && !editing && !confirming && !isTemp && (
+          <div style={{ display: 'flex', gap: 2 }}>
+            {iconBtn(
+              () => { setEditing(true); setConfirming(false) },
+              'Edit',
+              <>
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </>
+            )}
+            {iconBtn(
+              () => { setConfirming(true); setEditing(false) },
+              'Delete',
+              <>
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Delete confirmation */}
+      {confirming && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--color-text-2)', flex: 1 }}>
+            Delete this entry?
+          </span>
+          <button
+            onClick={handleDelete}
+            style={{
+              padding: '3px 10px', fontSize: 11, fontWeight: 700,
+              background: 'var(--color-accent)', color: '#fff',
+              border: 'none', borderRadius: 4, cursor: 'pointer',
+            }}
+          >
+            Yes
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            style={{
+              padding: '3px 10px', fontSize: 11, fontWeight: 600,
+              background: 'transparent', color: 'var(--color-text-2)',
+              border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer',
+            }}
+          >
+            No
+          </button>
+        </div>
+      )}
+
+      {/* Edit mode */}
+      {editing ? (
+        <>
+          <textarea
+            value={editBody}
+            onChange={e => setEditBody(e.target.value)}
+            rows={3}
+            autoFocus
+            style={{
+              width: '100%', padding: '7px 10px', boxSizing: 'border-box',
+              background: 'var(--input-bg)', border: '1px solid var(--color-border)',
+              borderRadius: 6, color: 'var(--color-text)', fontSize: 13,
+              outline: 'none', resize: 'vertical', lineHeight: 1.5, marginBottom: 6,
+            }}
+            onFocus={e => e.target.style.borderColor = 'var(--color-accent)'}
+            onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--color-text-3)', flexShrink: 0, width: 44 }}>Author</div>
+            <input
+              type="text"
+              value={editAuthor}
+              onChange={e => setEditAuthor(e.target.value)}
+              style={{
+                flex: 1, padding: '5px 8px',
+                background: 'var(--input-bg)', border: '1px solid var(--color-border)',
+                borderRadius: 5, color: 'var(--color-text)', fontSize: 12, outline: 'none',
+              }}
+              onFocus={e => e.target.style.borderColor = 'var(--color-accent)'}
+              onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={handleSave}
+              disabled={saving || !editBody.trim()}
+              style={{
+                padding: '5px 12px', fontSize: 11, fontWeight: 700,
+                background: editBody.trim() ? 'var(--color-accent)' : 'var(--color-border)',
+                color: '#fff', border: 'none', borderRadius: 5,
+                cursor: editBody.trim() ? 'pointer' : 'not-allowed',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (editBody.trim()) e.currentTarget.style.background = 'var(--color-accent-hover)' }}
+              onMouseLeave={e => { if (editBody.trim()) e.currentTarget.style.background = 'var(--color-accent)' }}
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              style={{
+                padding: '5px 12px', fontSize: 11, fontWeight: 600,
+                background: 'transparent', color: 'var(--color-text-2)',
+                border: '1px solid var(--color-border)', borderRadius: 5, cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        /* View mode body — shown whether confirming or not */
+        <>
+          <div style={{ fontSize: 13, color: 'var(--color-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+            {a.body}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-2)', marginTop: 6 }}>
+            {a.created_at ? format(parseISO(a.created_at), "MMM d, yyyy '·' h:mm a") : ''}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+const dash = <span style={{ color: 'var(--color-text-3)' }}>—</span>
 
 function ViewInfo({ lead, onStageChange }) {
   const stage = STAGE_MAP[lead.stage]
