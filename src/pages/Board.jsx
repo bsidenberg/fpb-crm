@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { STAGES, TEMPERATURE } from '../lib/stages'
 import KanbanBoard from '../components/KanbanBoard'
 import AddLeadModal from '../components/AddLeadModal'
+import ImportModal from '../components/ImportModal'
 
 function StatCard({ label, value, sub, color }) {
   return (
@@ -40,6 +41,7 @@ export default function Board() {
   const [filterTemp, setFilterTemp] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [modalStage, setModalStage] = useState('new')
+  const [importOpen, setImportOpen] = useState(false)
 
   const fetchLeads = useCallback(async () => {
     const { data, error } = await supabase
@@ -108,24 +110,47 @@ export default function Board() {
               {loading ? 'Loading...' : `${leads.length} total leads`}
             </div>
           </div>
-          <button
-            onClick={() => handleAddLead('new')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px',
-              background: 'var(--accent)',
-              border: 'none', borderRadius: 7,
-              color: '#fff', fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', transition: 'background 0.15s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-hover)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--accent)'}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Add Lead
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setImportOpen(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px',
+                background: 'transparent',
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                color: 'var(--color-text-2)', fontSize: 13, fontWeight: 500,
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-border-light)'; e.currentTarget.style.color = 'var(--color-text)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-2)' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Import CSV
+            </button>
+            <button
+              onClick={() => handleAddLead('new')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px',
+                background: 'var(--color-accent)',
+                border: 'none', borderRadius: 6,
+                color: '#fff', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--color-accent-hover)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--color-accent)'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Add Lead
+            </button>
+          </div>
         </div>
 
         {/* Stats strip */}
@@ -239,6 +264,12 @@ export default function Board() {
         onClose={() => setModalOpen(false)}
         onSaved={fetchLeads}
         defaultStage={modalStage}
+      />
+
+      <ImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onSaved={fetchLeads}
       />
     </div>
   )
