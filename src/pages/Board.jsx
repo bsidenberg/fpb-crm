@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { STAGES, TEMPERATURE } from '../lib/stages'
+import { getFollowUpStatus } from '../lib/followup'
 import KanbanBoard from '../components/KanbanBoard'
 import AddLeadModal from '../components/AddLeadModal'
 import ImportModal from '../components/ImportModal'
@@ -42,6 +43,7 @@ export default function Board() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalStage, setModalStage] = useState('new')
   const [importOpen, setImportOpen] = useState(false)
+  const [filterFollowUp, setFilterFollowUp] = useState('')
 
   const fetchLeads = useCallback(async () => {
     const { data, error } = await supabase
@@ -58,6 +60,9 @@ export default function Board() {
   const filtered = leads.filter(l => {
     if (filterStage && l.stage !== filterStage) return false
     if (filterTemp && l.priority !== filterTemp) return false
+    if (filterFollowUp) {
+      if (getFollowUpStatus(l.follow_up_date) !== filterFollowUp) return false
+    }
     if (search) {
       const q = search.toLowerCase()
       const match = [l.first_name, l.last_name, l.email, l.phone, l.company, l.city]
@@ -66,6 +71,13 @@ export default function Board() {
     }
     return true
   })
+
+  const activeLeadsForFollowUp = leads.filter(l => l.stage !== 'won' && l.stage !== 'lost')
+  const followUpCounts = {
+    overdue:  activeLeadsForFollowUp.filter(l => getFollowUpStatus(l.follow_up_date) === 'overdue').length,
+    today:    activeLeadsForFollowUp.filter(l => getFollowUpStatus(l.follow_up_date) === 'today').length,
+    upcoming: activeLeadsForFollowUp.filter(l => getFollowUpStatus(l.follow_up_date) === 'upcoming').length,
+  }
 
   const handleAddLead = (stageId) => {
     setModalStage(stageId)
@@ -229,9 +241,26 @@ export default function Board() {
             {TEMPERATURE.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
 
-          {(search || filterStage || filterTemp) && (
+          <select
+            value={filterFollowUp}
+            onChange={e => setFilterFollowUp(e.target.value)}
+            style={{
+              padding: '6px 10px', background: 'var(--surface-2)',
+              border: `1px solid ${filterFollowUp ? (filterFollowUp === 'overdue' ? '#EF4444' : filterFollowUp === 'today' ? '#D4872A' : 'var(--border)') : 'var(--border)'}`,
+              borderRadius: 6,
+              color: filterFollowUp ? 'var(--text)' : 'var(--text-muted)',
+              fontSize: 12, cursor: 'pointer', outline: 'none',
+            }}
+          >
+            <option value="">Follow-Ups</option>
+            <option value="overdue">Overdue{followUpCounts.overdue > 0 ? ` (${followUpCounts.overdue})` : ''}</option>
+            <option value="today">Due Today{followUpCounts.today > 0 ? ` (${followUpCounts.today})` : ''}</option>
+            <option value="upcoming">Upcoming (7d){followUpCounts.upcoming > 0 ? ` (${followUpCounts.upcoming})` : ''}</option>
+          </select>
+
+          {(search || filterStage || filterTemp || filterFollowUp) && (
             <button
-              onClick={() => { setSearch(''); setFilterStage(''); setFilterTemp('') }}
+              onClick={() => { setSearch(''); setFilterStage(''); setFilterTemp(''); setFilterFollowUp('') }}
               style={{
                 padding: '6px 10px', background: 'transparent',
                 border: '1px solid var(--border)', borderRadius: 6,
