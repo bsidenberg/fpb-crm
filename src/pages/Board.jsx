@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { STAGES, TEMPERATURE } from '../lib/stages'
 import { getFollowUpStatus } from '../lib/followup'
+import { calculateScore } from '../utils/scoreLeads'
 import KanbanBoard from '../components/KanbanBoard'
 import AddLeadModal from '../components/AddLeadModal'
 import ImportModal from '../components/ImportModal'
@@ -45,15 +46,42 @@ export default function Board() {
   const [modalStage, setModalStage] = useState('new')
   const [importOpen, setImportOpen] = useState(false)
   const [filterFollowUp, setFilterFollowUp] = useState('')
+  const [sortBy, setSortBy] = useState('score_desc')
 
   const fetchLeads = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('*')
-      .order('created_at', { ascending: false })
+    // Fetch leads and activity counts in parallel
+    const [leadsResult, actResult] = await Promise.all([
+      supabase.from('leads').select('*').order('created_at', { ascending: false }),
+      supabase.from('activities').select('lead_id'),
+    ])
 
-    if (!error) setLeads(data || [])
+    if (leadsResult.error || !leadsResult.data) { setLoading(false); return }
+
+    // Count activities per lead
+    const actCounts = {}
+    for (const a of (actResult.data || [])) {
+      actCounts[a.lead_id] = (actCounts[a.lead_id] || 0) + 1
+    }
+
+    // Calculate fresh scores and collect leads where score changed
+    const updates = []
+    const leadsWithScores = leadsResult.data.map(lead => {
+      const { score } = calculateScore(lead, actCounts[lead.id] || 0)
+      if (score !== (lead.score ?? 0)) updates.push({ id: lead.id, score })
+      return { ...lead, score }
+    })
+
+    setLeads(leadsWithScores)
     setLoading(false)
+
+    // Fire-and-forget: save changed scores back to Supabase
+    if (updates.length > 0) {
+      Promise.all(
+        updates.map(({ id, score }) =>
+          supabase.from('leads').update({ score }).eq('id', id)
+        )
+      ).catch(() => {})
+    }
   }, [])
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
@@ -71,6 +99,13 @@ export default function Board() {
       if (!match) return false
     }
     return true
+  })
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === 'score_desc') return (b.score || 0) - (a.score || 0)
+    if (sortBy === 'score_asc')  return (a.score || 0) - (b.score || 0)
+    if (sortBy === 'value_desc') return (Number(b.value) || 0) - (Number(a.value) || 0)
+    return 0 // 'newest' — preserve DB order
   })
 
   const activeLeadsForFollowUp = leads.filter(l => l.stage !== 'won' && l.stage !== 'lost')
@@ -259,6 +294,23 @@ export default function Board() {
             <option value="upcoming">Upcoming (7d){followUpCounts.upcoming > 0 ? ` (${followUpCounts.upcoming})` : ''}</option>
           </select>
 
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            style={{
+              padding: '6px 10px', background: 'var(--surface-2)',
+              border: `1px solid ${sortBy !== 'newest' ? 'var(--color-navy)' : 'var(--border)'}`,
+              borderRadius: 6,
+              color: sortBy !== 'newest' ? 'var(--color-navy)' : 'var(--text-muted)',
+              fontSize: 12, cursor: 'pointer', outline: 'none', fontWeight: sortBy !== 'newest' ? 600 : 400,
+            }}
+          >
+            <option value="score_desc">↓ Score</option>
+            <option value="score_asc">↑ Score</option>
+            <option value="value_desc">↓ Value</option>
+            <option value="newest">Newest First</option>
+          </select>
+
           {(search || filterStage || filterTemp || filterFollowUp) && (
             <button
               onClick={() => { setSearch(''); setFilterStage(''); setFilterTemp(''); setFilterFollowUp('') }}
@@ -282,7 +334,7 @@ export default function Board() {
       ) : (
         <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', paddingTop: 16 }}>
           <KanbanBoard
-            leads={filtered}
+            leads={sorted}
             onLeadsChange={fetchLeads}
             onAddLead={handleAddLead}
           />

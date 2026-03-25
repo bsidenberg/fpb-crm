@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { getFollowUpStatus } from '../lib/followup'
 import { STAGES, TEMPERATURE, ACTIVITY_TYPES } from '../lib/stages'
+import { getScoreGrade } from '../utils/scoreLeads'
 
 const STAGE_MAP = Object.fromEntries(STAGES.map(s => [s.id, s]))
 const TEMP_MAP  = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
@@ -66,6 +67,7 @@ export default function FollowUps() {
   const [lastActivity, setLastActivity] = useState({}) // lead_id -> activity
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('') // '' | 'overdue' | 'today' | 'upcoming'
+  const [scoreSort, setScoreSort]     = useState('') // '' | 'asc' | 'desc'
 
   useEffect(() => {
     async function load() {
@@ -117,7 +119,11 @@ export default function FollowUps() {
 
   const filtered = withStatus
     .filter(l => !filterStatus || l._status === filterStatus)
-    .sort((a, b) => (STATUS_ORDER[a._status] ?? 9) - (STATUS_ORDER[b._status] ?? 9))
+    .sort((a, b) => {
+      if (scoreSort === 'desc') return (b.score || 0) - (a.score || 0)
+      if (scoreSort === 'asc')  return (a.score || 0) - (b.score || 0)
+      return (STATUS_ORDER[a._status] ?? 9) - (STATUS_ORDER[b._status] ?? 9)
+    })
 
   const thStyle = {
     padding: '8px 12px',
@@ -211,6 +217,12 @@ export default function FollowUps() {
                 <th style={thStyle}>Follow-Up Date</th>
                 <th style={thStyle}>Stage</th>
                 <th style={thStyle}>Temp</th>
+                <th
+                  style={{ ...thStyle, cursor: 'pointer', userSelect: 'none', color: scoreSort ? 'var(--color-navy)' : 'var(--color-text-3)' }}
+                  onClick={() => setScoreSort(s => s === 'desc' ? 'asc' : s === 'asc' ? '' : 'desc')}
+                >
+                  Score {scoreSort === 'desc' ? '↓' : scoreSort === 'asc' ? '↑' : '↕'}
+                </th>
                 <th style={thStyle}>City</th>
                 <th style={thStyle}>Phone</th>
                 <th style={thStyle}>Last Activity</th>
@@ -245,6 +257,22 @@ export default function FollowUps() {
                     </td>
                     <td style={tdStyle}><StageBadge stageId={lead.stage} /></td>
                     <td style={tdStyle}><TempBadge priority={lead.priority} /></td>
+                    <td style={tdStyle}>
+                      {lead.score != null ? (() => {
+                        const g = getScoreGrade(lead.score)
+                        return (
+                          <span title={`Score: ${lead.score} — ${g.label}`} style={{
+                            fontSize: 9, fontWeight: 800,
+                            color: g.color, background: g.bg,
+                            padding: '2px 6px', borderRadius: 3,
+                            border: `1px solid ${g.color}30`,
+                            letterSpacing: '0.3px',
+                          }}>
+                            {g.grade} <span style={{ fontWeight: 400, opacity: 0.8 }}>{lead.score}</span>
+                          </span>
+                        )
+                      })() : <span style={{ color: 'var(--color-text-3)' }}>—</span>}
+                    </td>
                     <td style={tdStyle}>{lead.city || '—'}</td>
                     <td style={tdStyle}>
                       {lead.phone

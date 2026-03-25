@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { STAGES, STAGE_MAP, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
+import { calculateScore, getScoreGrade } from '../utils/scoreLeads'
 
 const TEMP_MAP = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 
@@ -81,11 +82,17 @@ export default function LeadDetail() {
   const [noteAuthor, setNoteAuthor] = useState('Brian')
   const [activities, setActivities] = useState([])
   const [addingNote, setAddingNote] = useState(false)
+  const [scoreData, setScoreData] = useState(null)
 
   useEffect(() => {
     fetchLead()
     fetchActivities()
   }, [id])
+
+  // Recalculate score whenever lead data or activity count changes
+  useEffect(() => {
+    if (lead) setScoreData(calculateScore(lead, activities.length))
+  }, [lead, activities])
 
   const fetchLead = async () => {
     const { data, error } = await supabase.from('leads').select('*').eq('id', id).single()
@@ -234,6 +241,23 @@ export default function LeadDetail() {
           }}>
             {temp.label}
           </div>
+          {scoreData && (() => {
+            const g = getScoreGrade(scoreData.score)
+            return (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '3px 10px', borderRadius: 5,
+                background: g.bg, border: `1px solid ${g.color}30`,
+              }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: g.color, letterSpacing: '-0.3px' }}>
+                  {g.grade}
+                </span>
+                <span style={{ fontSize: 11, color: g.color, fontWeight: 600 }}>
+                  {scoreData.score}
+                </span>
+              </div>
+            )
+          })()}
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
@@ -279,7 +303,10 @@ export default function LeadDetail() {
           {editing ? (
             <EditForm form={form} set={set} />
           ) : (
-            <ViewInfo lead={lead} onStageChange={handleStageChange} />
+            <>
+              <ViewInfo lead={lead} onStageChange={handleStageChange} />
+              <ScoreBreakdown scoreData={scoreData} />
+            </>
           )}
         </div>
 
@@ -601,6 +628,80 @@ function ActivityEntry({ activity: a, onUpdate, onDelete }) {
 }
 
 const dash = <span style={{ color: 'var(--color-text-3)' }}>—</span>
+
+function ScoreBreakdown({ scoreData }) {
+  if (!scoreData) return null
+  const g = getScoreGrade(scoreData.score)
+  const positive = scoreData.breakdown.filter(b => b.pts > 0)
+  const negative = scoreData.breakdown.filter(b => b.pts < 0)
+  const maxPts = 100
+
+  return (
+    <Section title="Lead Score">
+      {/* Score bar */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              fontSize: 28, fontWeight: 800, color: g.color, letterSpacing: '-1px', lineHeight: 1,
+            }}>
+              {scoreData.score}
+            </span>
+            <div>
+              <div style={{
+                fontSize: 12, fontWeight: 700, color: g.color,
+                background: g.bg, padding: '2px 8px', borderRadius: 4,
+                display: 'inline-block', letterSpacing: '0.3px',
+              }}>
+                Grade {g.grade} — {g.label}
+              </div>
+            </div>
+          </div>
+          <span style={{ fontSize: 11, color: '#9CA3AF' }}>/ 100</span>
+        </div>
+        <div style={{ height: 6, background: '#F3F4F6', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 3,
+            width: `${scoreData.score}%`,
+            background: g.color,
+            transition: 'width 0.4s ease',
+          }} />
+        </div>
+      </div>
+
+      {/* Signal breakdown */}
+      {positive.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: '#9CA3AF', marginBottom: 5 }}>
+            Positive Signals
+          </div>
+          {positive.map((b, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid #F3F4F6' }}>
+              <span style={{ fontSize: 12, color: '#374151' }}>{b.label}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#16A34A' }}>+{b.pts}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {negative.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: '#9CA3AF', marginBottom: 5 }}>
+            Penalties
+          </div>
+          {negative.map((b, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: '1px solid #F3F4F6' }}>
+              <span style={{ fontSize: 12, color: '#374151' }}>{b.label}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626' }}>{b.pts}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {scoreData.breakdown.length === 0 && (
+        <div style={{ fontSize: 12, color: '#9CA3AF' }}>No signals — add contact info to improve this score.</div>
+      )}
+    </Section>
+  )
+}
 
 function ViewInfo({ lead, onStageChange }) {
   const stage = STAGE_MAP[lead.stage]

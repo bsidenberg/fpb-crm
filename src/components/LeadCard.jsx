@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import { TEMPERATURE } from '../lib/stages'
 import { getFollowUpStatus } from '../lib/followup'
+import { getScoreGrade } from '../utils/scoreLeads'
 
 const TEMP_MAP = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 
@@ -86,22 +87,37 @@ export default function LeadCard({ lead, overlay = false }) {
           e.currentTarget.style.background = 'var(--color-surface)'
         }}
       >
-        {/* Name + priority badge */}
+        {/* Name + badges row */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text)', lineHeight: 1.3, minWidth: 0 }}>
             {lead.first_name} {lead.last_name}
           </div>
-          <div style={{
-            fontSize: 9, fontWeight: 700,
-            color: temp.textColor,
-            background: temp.bgColor,
-            padding: '2px 6px',
-            borderRadius: 3,
-            flexShrink: 0,
-            letterSpacing: '0.7px',
-            textTransform: 'uppercase',
-          }}>
-            {temp.label}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+            {lead.score != null && (() => {
+              const g = getScoreGrade(lead.score)
+              return (
+                <span title={`Score: ${lead.score} — ${g.label}`} style={{
+                  fontSize: 9, fontWeight: 800,
+                  color: g.color, background: g.bg,
+                  padding: '2px 5px', borderRadius: 3,
+                  letterSpacing: '0.3px',
+                  border: `1px solid ${g.color}30`,
+                }}>
+                  {g.grade}
+                </span>
+              )
+            })()}
+            <div style={{
+              fontSize: 9, fontWeight: 700,
+              color: temp.textColor,
+              background: temp.bgColor,
+              padding: '2px 6px',
+              borderRadius: 3,
+              letterSpacing: '0.7px',
+              textTransform: 'uppercase',
+            }}>
+              {temp.label}
+            </div>
           </div>
         </div>
 
