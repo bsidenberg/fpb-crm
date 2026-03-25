@@ -49,8 +49,8 @@ export default function LeadCard({ lead, overlay = false }) {
 
   const borderColor = isOverdue ? '#C0392B' : temp.color
   const baseBoxShadow = isOverdue
-    ? '0 0 0 1px rgba(192,57,43,0.25), -2px 0 8px rgba(192,57,43,0.2)'
-    : 'none'
+    ? '0 0 0 1px rgba(192,39,45,0.2), 0 2px 8px rgba(192,39,45,0.1)'
+    : '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)'
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -63,7 +63,7 @@ export default function LeadCard({ lead, overlay = false }) {
       <div
         onClick={() => !isDragging && navigate(`/leads/${lead.id}`)}
         style={{
-          background: 'var(--color-surface-2)',
+          background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
           borderLeft: `3px solid ${borderColor}`,
           borderRadius: 7,
@@ -72,18 +72,18 @@ export default function LeadCard({ lead, overlay = false }) {
           cursor: 'grab',
           transition: 'box-shadow 0.15s, background 0.15s',
           animation: overlay ? 'none' : 'fadeIn 0.15s ease',
-          boxShadow: overlay ? '0 10px 30px rgba(0,0,0,0.6)' : baseBoxShadow,
+          boxShadow: overlay ? '0 8px 24px rgba(0,0,0,0.18)' : baseBoxShadow,
           userSelect: 'none',
         }}
         onMouseEnter={e => {
           e.currentTarget.style.boxShadow = isOverdue
-            ? '0 2px 12px rgba(0,0,0,0.4), 0 0 0 1px rgba(192,57,43,0.35)'
-            : '0 2px 12px rgba(0,0,0,0.4)'
-          e.currentTarget.style.background = 'var(--color-border)'
+            ? '0 4px 12px rgba(0,0,0,0.1), 0 0 0 1px rgba(192,39,45,0.3)'
+            : '0 4px 12px rgba(0,0,0,0.1)'
+          e.currentTarget.style.background = '#F9FAFB'
         }}
         onMouseLeave={e => {
           e.currentTarget.style.boxShadow = baseBoxShadow
-          e.currentTarget.style.background = 'var(--color-surface-2)'
+          e.currentTarget.style.background = 'var(--color-surface)'
         }}
       >
         {/* Name + priority badge */}
@@ -182,7 +182,7 @@ export default function LeadCard({ lead, overlay = false }) {
                 fontSize: 9, fontWeight: 700,
                 color: 'var(--color-accent)',
                 background: 'var(--color-accent-light)',
-                border: '1px solid rgba(192,57,43,0.3)',
+                border: '1px solid rgba(192,39,45,0.25)',
                 padding: '1px 5px',
                 borderRadius: 3,
                 letterSpacing: '0.3px',

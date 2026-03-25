@@ -14,7 +14,7 @@ export default function KanbanColumn({ stage, leads, onAddLead }) {
 
   return (
     <div style={{
-      width: 240,
+      width: 248,
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
@@ -22,8 +22,11 @@ export default function KanbanColumn({ stage, leads, onAddLead }) {
       border: '1px solid var(--border)',
       borderRadius: 10,
       overflow: 'hidden',
-      transition: 'border-color 0.15s',
+      transition: 'border-color 0.15s, box-shadow 0.15s',
       borderColor: isOver ? stage.color : 'var(--border)',
+      boxShadow: isOver
+        ? `0 0 0 2px ${stage.color}40, 0 4px 12px rgba(0,0,0,0.08)`
+        : '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
     }}>
       {/* Column header */}
       <div style={{

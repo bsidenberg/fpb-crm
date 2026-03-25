@@ -204,7 +204,7 @@ export default function FollowUps() {
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
-            <thead style={{ position: 'sticky', top: 0, background: 'var(--color-surface)', zIndex: 1 }}>
+            <thead style={{ position: 'sticky', top: 0, background: 'var(--color-surface-2)', zIndex: 1, borderBottom: '2px solid var(--color-border)' }}>
               <tr>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Name</th>
@@ -226,7 +226,7 @@ export default function FollowUps() {
                     key={lead.id}
                     onClick={() => navigate(`/leads/${lead.id}`)}
                     style={{ cursor: 'pointer', transition: 'background 0.1s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-2)'}
+                    onMouseEnter={e => e.currentTarget.style.background = '#F9FAFB'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
                     <td style={tdStyle}>

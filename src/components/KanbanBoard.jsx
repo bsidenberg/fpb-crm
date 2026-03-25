@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   DndContext, DragOverlay,
   PointerSensor, KeyboardSensor,
@@ -30,8 +30,12 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead }) {
   const [items, setItems] = useState(() => buildItems(leads))
   const [activeId, setActiveId] = useState(null)
 
-  // Sync when leads prop changes (e.g. after search/filter)
-  useState(() => { setItems(buildItems(leads)) }, [leads])
+  // Always-current ref so async handlers never read stale closure state
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+
+  // Sync when leads prop changes (e.g. after search/filter or refetch)
+  useEffect(() => { setItems(buildItems(leads)) }, [leads])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -44,8 +48,8 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead }) {
 
   const handleDragOver = useCallback(({ active, over }) => {
     if (!over) return
-    const activeContainer = findContainer(items, active.id)
-    const overContainer = findContainer(items, over.id) ?? over.id
+    const activeContainer = findContainer(itemsRef.current, active.id)
+    const overContainer = findContainer(itemsRef.current, over.id) ?? over.id
 
     if (!activeContainer || !overContainer || activeContainer === overContainer) return
 
@@ -67,14 +71,15 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead }) {
         ],
       }
     })
-  }, [items])
+  }, [])
 
   const handleDragEnd = useCallback(async ({ active, over }) => {
     setActiveId(null)
     if (!over) return
 
-    const activeContainer = findContainer(items, active.id)
-    const overContainer = findContainer(items, over.id) ?? over.id
+    // Read from ref — always reflects state after handleDragOver mutations
+    const activeContainer = findContainer(itemsRef.current, active.id)
+    const overContainer = findContainer(itemsRef.current, over.id) ?? over.id
 
     if (!activeContainer || !overContainer) return
 
@@ -88,15 +93,15 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead }) {
         return { ...prev, [activeContainer]: arrayMove(col, oldIdx, newIdx) }
       })
     } else {
-      // Stage changed — persist to Supabase
+      // Optimistic update already applied by handleDragOver — now persist
       const { error } = await supabase
         .from('leads')
         .update({ stage: overContainer })
         .eq('id', active.id)
 
       if (error) {
-        toast('Failed to update stage', 'error')
-        // Revert
+        toast('Failed to move lead', 'error')
+        // Revert to last known good state from server
         setItems(buildItems(leads))
       } else {
         const stageName = STAGES.find(s => s.id === overContainer)?.label
@@ -104,7 +109,7 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead }) {
         onLeadsChange?.()
       }
     }
-  }, [items, leads, onLeadsChange, toast])
+  }, [leads, onLeadsChange, toast])
 
   const activeCard = activeId
     ? Object.values(items).flat().find(l => l.id === activeId)

@@ -275,7 +275,7 @@ export default function LeadDetail() {
       {/* Body */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         {/* Left — lead info */}
-        <div style={{ flex: 1, padding: 24, borderRight: '1px solid var(--border)', overflowY: 'auto', minWidth: 0 }}>
+        <div style={{ flex: 1, padding: 24, borderRight: '1px solid var(--border)', overflowY: 'auto', minWidth: 0, background: 'var(--color-surface)' }}>
           {editing ? (
             <EditForm form={form} set={set} />
           ) : (
@@ -444,7 +444,7 @@ function ActivityEntry({ activity: a, onUpdate, onDelete }) {
       style={{
         position: 'relative',
         borderLeft: `3px solid ${aType.color}`,
-        background: 'var(--color-bg)',
+        background: 'var(--color-surface)',
         border: '1px solid var(--color-border)',
         borderLeftWidth: 3,
         borderRadius: '0 6px 6px 0',
@@ -681,7 +681,7 @@ function ViewInfo({ lead, onStageChange }) {
                   fontSize: 11, fontWeight: 600,
                   color: 'var(--color-accent)',
                   background: 'var(--color-accent-light)',
-                  border: '1px solid rgba(192,57,43,0.3)',
+                  border: '1px solid rgba(192,39,45,0.25)',
                   padding: '3px 9px', borderRadius: 20,
                 }}>
                   {tag}

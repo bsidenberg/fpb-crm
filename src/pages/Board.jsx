@@ -14,6 +14,7 @@ function StatCard({ label, value, sub, color }) {
       borderRadius: 8,
       padding: '12px 16px',
       minWidth: 140,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
     }}>
       <div style={{
         fontSize: 10, color: 'var(--color-text-3)', fontWeight: 600,
@@ -22,10 +23,10 @@ function StatCard({ label, value, sub, color }) {
         {label}
       </div>
       <div style={{
-        fontFamily: "'DM Serif Display', serif",
-        fontSize: 28, fontWeight: 400,
+        fontSize: 28, fontWeight: 700,
         color: color || 'var(--color-text)',
         marginTop: 4, lineHeight: 1,
+        letterSpacing: '-0.5px',
       }}>
         {value}
       </div>
@@ -172,7 +173,7 @@ export default function Board() {
             label="Pipeline Value"
             value={'$' + pipelineValue.toLocaleString()}
             sub="active stages only"
-            color="var(--color-gold)"
+            color="var(--color-navy)"
           />
           <StatCard
             label="Closed Won"

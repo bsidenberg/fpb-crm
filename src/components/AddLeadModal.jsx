@@ -131,7 +131,7 @@ export default function AddLeadModal({ open, onClose, onSaved, defaultStage }) {
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.7)',
+        background: 'rgba(26,36,68,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20,
       }}
@@ -146,7 +146,7 @@ export default function AddLeadModal({ open, onClose, onSaved, defaultStage }) {
         overflow: 'hidden',
         display: 'flex', flexDirection: 'column',
         animation: 'slideUp 0.2s ease',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+        boxShadow: '0 20px 48px rgba(26,36,68,0.18), 0 4px 16px rgba(0,0,0,0.08)',
       }}>
         {/* Header */}
         <div style={{

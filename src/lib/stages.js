@@ -1,19 +1,19 @@
 export const STAGES = [
-  { id: 'new',        label: 'New Lead',    color: '#C0392B', bg: 'rgba(192,57,43,0.12)'   },
-  { id: 'contacted',  label: 'Contacted',   color: '#D4872A', bg: 'rgba(212,135,42,0.12)'  },
-  { id: 'quote_sent', label: 'Quote Sent',  color: '#7C3AED', bg: 'rgba(124,58,237,0.12)'  },
-  { id: 'follow_up',  label: 'Follow-Up',   color: '#D97706', bg: 'rgba(217,119,6,0.12)'   },
-  { id: 'won',        label: 'Closed Won',  color: '#27AE60', bg: 'rgba(39,174,96,0.12)'   },
-  { id: 'lost',       label: 'Closed Lost', color: '#6B6360', bg: 'rgba(107,99,96,0.12)'   },
+  { id: 'new',        label: 'New Lead',    color: '#C0272D', bg: '#FEF2F2'  },
+  { id: 'contacted',  label: 'Contacted',   color: '#D97706', bg: '#FEF3C7'  },
+  { id: 'quote_sent', label: 'Quote Sent',  color: '#7C3AED', bg: '#F5F3FF'  },
+  { id: 'follow_up',  label: 'Follow-Up',   color: '#D97706', bg: '#FEF3C7'  },
+  { id: 'won',        label: 'Closed Won',  color: '#16A34A', bg: '#DCFCE7'  },
+  { id: 'lost',       label: 'Closed Lost', color: '#6B7280', bg: '#F3F4F6'  },
 ]
 
 export const STAGE_MAP = Object.fromEntries(STAGES.map(s => [s.id, s]))
 
-// textColor: what to render badge text in; bgColor: solid badge fill
+// textColor: badge text; bgColor: solid badge fill; color: border/dot accent
 export const TEMPERATURE = [
-  { id: 'cold', label: 'Cold', color: '#4A4340', textColor: '#A8A09A', bgColor: 'rgba(74,67,64,0.5)'  },
-  { id: 'warm', label: 'Warm', color: '#D4872A', textColor: '#1C1917', bgColor: '#D4872A'               },
-  { id: 'hot',  label: 'Hot',  color: '#C0392B', textColor: '#F5F0ED', bgColor: '#C0392B'               },
+  { id: 'cold', label: 'Cold', color: '#6B7280', textColor: '#374151', bgColor: '#F3F4F6'  },
+  { id: 'warm', label: 'Warm', color: '#D97706', textColor: '#92400E', bgColor: '#FEF3C7'  },
+  { id: 'hot',  label: 'Hot',  color: '#C0272D', textColor: '#FFFFFF', bgColor: '#C0272D'  },
 ]
 
 export const LEAD_SOURCES = [
@@ -32,8 +32,8 @@ export const TAGS = [
 ]
 
 export const ACTIVITY_TYPES = [
-  { id: 'note',      label: 'Note',     color: '#6B6360' },
-  { id: 'call',      label: 'Call Log', color: '#27AE60' },
-  { id: 'email',     label: 'Email',    color: '#D4872A' },
-  { id: 'follow_up', label: 'Task',     color: '#C0392B' },
+  { id: 'note',      label: 'Note',     color: '#6B7280' },
+  { id: 'call',      label: 'Call Log', color: '#16A34A' },
+  { id: 'email',     label: 'Email',    color: '#D97706' },
+  { id: 'follow_up', label: 'Task',     color: '#C0272D' },
 ]
