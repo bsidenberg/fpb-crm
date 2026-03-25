@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { STAGES, TEMPERATURE } from '../lib/stages'
 import { getFollowUpStatus } from '../lib/followup'
@@ -85,6 +85,77 @@ export default function Board() {
   }, [])
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
+
+  // ── Realtime sync ─────────────────────────────────────────────────
+  // isDraggingRef: set true while a card drag is in progress so we don't
+  // reset KanbanBoard state mid-drag. Any realtime changes during a drag
+  // are queued and applied when the drag ends.
+  const isDraggingRef     = useRef(false)
+  const pendingUpdatesRef = useRef([])
+  const pollingRef        = useRef(null)
+
+  const applyLeadChange = useCallback((payload) => {
+    if (payload.eventType === 'INSERT') {
+      const { score } = calculateScore(payload.new, 0)
+      setLeads(prev => {
+        if (prev.some(l => l.id === payload.new.id)) return prev // dedup
+        return [...prev, { ...payload.new, score }]
+      })
+    }
+    if (payload.eventType === 'UPDATE') {
+      setLeads(prev => prev.map(l =>
+        l.id === payload.new.id ? { ...payload.new, score: payload.new.score ?? l.score } : l
+      ))
+    }
+    if (payload.eventType === 'DELETE') {
+      setLeads(prev => prev.filter(l => l.id !== payload.old.id))
+    }
+  }, [])
+
+  const flushPending = useCallback(() => {
+    for (const payload of pendingUpdatesRef.current) applyLeadChange(payload)
+    pendingUpdatesRef.current = []
+  }, [applyLeadChange])
+
+  const handleDragStateChange = useCallback((dragging) => {
+    isDraggingRef.current = dragging
+    if (!dragging) flushPending()
+  }, [flushPending])
+
+  useEffect(() => {
+    let debounceTimer = null
+
+    // NOTE: Enable replication for the `leads` table in the Supabase Dashboard:
+    // Database → Replication → supabase_realtime → toggle ON for "leads"
+    const channel = supabase
+      .channel('board-leads-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
+        clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => {
+          if (isDraggingRef.current) {
+            // Queue updates that arrive during a drag — flush when drag ends
+            pendingUpdatesRef.current.push(payload)
+          } else {
+            applyLeadChange(payload)
+          }
+        }, 100)
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Realtime healthy — stop polling fallback if running
+          if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
+        } else if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && !pollingRef.current) {
+          // Realtime unavailable — fall back to polling every 30s
+          pollingRef.current = setInterval(() => fetchLeads(), 30_000)
+        }
+      })
+
+    return () => {
+      clearTimeout(debounceTimer)
+      if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
+      supabase.removeChannel(channel)
+    }
+  }, [applyLeadChange, fetchLeads])
 
   const filtered = leads.filter(l => {
     if (filterStage && l.stage !== filterStage) return false
@@ -337,6 +408,7 @@ export default function Board() {
             leads={sorted}
             onLeadsChange={fetchLeads}
             onAddLead={handleAddLead}
+            onDragStateChange={handleDragStateChange}
           />
         </div>
       )}

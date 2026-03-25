@@ -89,6 +89,58 @@ export default function LeadDetail() {
     fetchActivities()
   }, [id])
 
+  // ── Realtime: lead changes ────────────────────────────────────────
+  useEffect(() => {
+    // NOTE: Enable replication for `leads` in Supabase Dashboard:
+    // Database → Replication → supabase_realtime → toggle ON for "leads"
+    const channel = supabase
+      .channel(`lead-detail-${id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `id=eq.${id}` }, (payload) => {
+        setLead(payload.new)
+        setForm(payload.new)
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [id])
+
+  // ── Realtime: activities for this lead ────────────────────────────
+  useEffect(() => {
+    let debounceTimer = null
+
+    // NOTE: Enable replication for `activities` in Supabase Dashboard:
+    // Database → Replication → supabase_realtime → toggle ON for "activities"
+    const channel = supabase
+      .channel(`activities-realtime-${id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'activities', filter: `lead_id=eq.${id}` },
+        (payload) => {
+          clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => {
+            if (payload.eventType === 'INSERT') {
+              setActivities(prev => {
+                // Skip if we already have this id (covers optimistic entries replaced by real ones)
+                if (prev.some(a => a.id === payload.new.id)) return prev
+                // Remove any matching optimistic entry (tmp_ prefix) and prepend real record
+                const withoutOptimistic = prev.filter(a => !String(a.id).startsWith('tmp_'))
+                return [payload.new, ...withoutOptimistic.filter(a => a.id !== payload.new.id)]
+              })
+            }
+            if (payload.eventType === 'UPDATE') {
+              setActivities(prev => prev.map(a => a.id === payload.new.id ? payload.new : a))
+            }
+            if (payload.eventType === 'DELETE') {
+              setActivities(prev => prev.filter(a => a.id !== payload.old.id))
+            }
+          }, 100)
+        }
+      )
+      .subscribe()
+
+    return () => { clearTimeout(debounceTimer); supabase.removeChannel(channel) }
+  }, [id])
+
   // Recalculate score whenever lead data or activity count changes
   useEffect(() => {
     if (lead) setScoreData(calculateScore(lead, activities.length))

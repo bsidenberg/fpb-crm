@@ -25,7 +25,7 @@ function findContainer(items, id) {
   return Object.keys(items).find(key => items[key].some(item => item.id === id))
 }
 
-export default function KanbanBoard({ leads, onLeadsChange, onAddLead }) {
+export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragStateChange }) {
   const toast = useToast()
   const [items, setItems] = useState(() => buildItems(leads))
   const [activeId, setActiveId] = useState(null)
@@ -55,7 +55,8 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead }) {
     // Record where this card lives NOW, before any drag-over mutations
     originalContainerRef.current = findContainer(itemsRef.current, active.id)
     console.log('[Drag] start — card:', active.id, '| column:', originalContainerRef.current)
-  }, [])
+    onDragStateChange?.(true)
+  }, [onDragStateChange])
 
   const handleDragOver = useCallback(({ active, over }) => {
     if (!over) return
@@ -129,7 +130,8 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead }) {
         onLeadsChange?.()
       }
     }
-  }, [leads, onLeadsChange, toast])
+    onDragStateChange?.(false)
+  }, [leads, onLeadsChange, toast, onDragStateChange])
 
   const activeCard = activeId
     ? Object.values(items).flat().find(l => l.id === activeId)

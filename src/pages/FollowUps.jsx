@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { supabase } from '../lib/supabase'
@@ -69,8 +69,7 @@ export default function FollowUps() {
   const [filterStatus, setFilterStatus] = useState('') // '' | 'overdue' | 'today' | 'upcoming'
   const [scoreSort, setScoreSort]     = useState('') // '' | 'asc' | 'desc'
 
-  useEffect(() => {
-    async function load() {
+  const load = useCallback(async () => {
       const { data: leadsData } = await supabase
         .from('leads')
         .select('*')
@@ -102,9 +101,27 @@ export default function FollowUps() {
       setLeads(leadsData)
       setLastActivity(latestMap)
       setLoading(false)
-    }
-    load()
   }, [])
+
+  useEffect(() => { load() }, [load])
+
+  // ── Realtime: leads table (follow-up dates, stage changes, etc.) ──
+  useEffect(() => {
+    let debounceTimer = null
+
+    // NOTE: Enable replication in Supabase Dashboard:
+    // Database → Replication → supabase_realtime → toggle ON for "leads"
+    const channel = supabase
+      .channel('followups-leads-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+        // Any leads table change may affect what shows in follow-ups — reload the filtered set
+        clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => load(), 100)
+      })
+      .subscribe()
+
+    return () => { clearTimeout(debounceTimer); supabase.removeChannel(channel) }
+  }, [load])
 
   const withStatus = leads.map(l => ({
     ...l,

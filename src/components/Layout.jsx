@@ -1,4 +1,40 @@
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+
+function LiveIndicator() {
+  const [status, setStatus] = useState('connecting') // 'live' | 'reconnecting' | 'connecting'
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('presence-heartbeat')
+      .subscribe((s) => {
+        if (s === 'SUBSCRIBED')    setStatus('live')
+        else if (s === 'CLOSED')   setStatus('connecting')
+        else                        setStatus('reconnecting')
+      })
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  const isLive = status === 'live'
+  const color  = isLive ? '#16A34A' : '#9CA3AF'
+  const label  = isLive ? 'Live' : status === 'connecting' ? 'Connecting…' : 'Reconnecting…'
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 5,
+      fontSize: 9, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase',
+      color, marginTop: 6,
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0,
+        animation: isLive ? 'livePulse 2s ease-in-out infinite' : 'none',
+      }} />
+      {label}
+    </div>
+  )
+}
 
 const BarnIcon = () => (
   <svg width="26" height="22" viewBox="0 0 28 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -101,6 +137,7 @@ export default function Layout() {
           }}>
             Sales CRM
           </div>
+          <LiveIndicator />
         </div>
 
         {/* Nav */}
