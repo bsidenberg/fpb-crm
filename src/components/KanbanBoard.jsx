@@ -111,9 +111,12 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
       // Cross-column drop — persist stage change to Supabase
       console.log('[Drag] saving stage to Supabase:', active.id, '→', finalContainer)
 
+      const updates = { stage: finalContainer }
+      if (finalContainer === 'quote_sent') updates.quote_sent_at = new Date().toISOString()
+
       const { error } = await supabase
         .from('leads')
-        .update({ stage: finalContainer })
+        .update(updates)
         .eq('id', active.id)
 
       if (error) {

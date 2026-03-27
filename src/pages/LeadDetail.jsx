@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { supabase } from '../lib/supabase'
@@ -7,6 +7,55 @@ import { STAGES, STAGE_MAP, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVIT
 import { calculateScore, getScoreGrade } from '../utils/scoreLeads'
 
 const TEMP_MAP = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
+
+const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
+
+function TempPopover({ current, onSelect, onClose }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 300,
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 7,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.14)',
+        overflow: 'hidden',
+        minWidth: 110,
+      }}
+    >
+      {TEMPERATURE.map(t => (
+        <button
+          key={t.id}
+          onClick={() => onSelect(t.id)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7,
+            width: '100%', padding: '8px 12px',
+            background: current === t.id ? t.bgColor : 'transparent',
+            border: 'none', cursor: 'pointer',
+            fontSize: 12, fontWeight: current === t.id ? 700 : 400,
+            color: current === t.id ? t.textColor : 'var(--color-text)',
+            transition: 'background 0.1s',
+          }}
+          onMouseEnter={e => { if (current !== t.id) e.currentTarget.style.background = 'var(--color-surface-2)' }}
+          onMouseLeave={e => { if (current !== t.id) e.currentTarget.style.background = 'transparent' }}
+        >
+          <span style={{ fontSize: 13 }}>{TEMP_ICONS[t.id]}</span>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 const inputStyle = {
   width: '100%', padding: '7px 10px',
@@ -83,6 +132,7 @@ export default function LeadDetail() {
   const [activities, setActivities] = useState([])
   const [addingNote, setAddingNote] = useState(false)
   const [scoreData, setScoreData] = useState(null)
+  const [tempOpen, setTempOpen] = useState(false)
 
   useEffect(() => {
     fetchLead()
@@ -178,7 +228,9 @@ export default function LeadDetail() {
   const handleStageChange = async (newStage) => {
     const prevStage = lead.stage
     setLead(l => ({ ...l, stage: newStage }))
-    const { error } = await supabase.from('leads').update({ stage: newStage }).eq('id', id)
+    const updates = { stage: newStage }
+    if (newStage === 'quote_sent') updates.quote_sent_at = new Date().toISOString()
+    const { error } = await supabase.from('leads').update(updates).eq('id', id)
     if (error) {
       setLead(l => ({ ...l, stage: prevStage }))
       toast('Stage update failed', 'error')
@@ -186,6 +238,19 @@ export default function LeadDetail() {
       toast(`Stage → ${STAGE_MAP[newStage]?.label}`)
     }
   }
+
+  const handleTempSelect = useCallback(async (newPriority) => {
+    setTempOpen(false)
+    const prev = lead.priority
+    setLead(l => ({ ...l, priority: newPriority }))
+    const { error } = await supabase.from('leads').update({ priority: newPriority }).eq('id', id)
+    if (error) {
+      setLead(l => ({ ...l, priority: prev }))
+      toast('Failed to update temperature', 'error')
+    } else {
+      toast('Temperature updated')
+    }
+  }, [lead?.priority, id, toast])
 
   const handleAddNote = async () => {
     if (!note.trim()) return
@@ -285,13 +350,31 @@ export default function LeadDetail() {
               {stage.label}
             </div>
           )}
-          <div style={{
-            fontSize: 10, fontWeight: 700,
-            color: temp.textColor, background: temp.bgColor,
-            padding: '2px 7px', borderRadius: 5,
-            letterSpacing: '0.5px', textTransform: 'uppercase',
-          }}>
-            {temp.label}
+          <div style={{ position: 'relative' }}>
+            <div
+              title="Click to change temperature"
+              onClick={() => setTempOpen(o => !o)}
+              style={{
+                fontSize: 10, fontWeight: 700,
+                color: temp.textColor, background: temp.bgColor,
+                padding: '2px 7px', borderRadius: 5,
+                letterSpacing: '0.5px', textTransform: 'uppercase',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 4,
+                border: tempOpen ? `1px solid ${temp.color}` : '1px solid transparent',
+                transition: 'border-color 0.1s',
+              }}
+            >
+              <span style={{ fontSize: 11 }}>{TEMP_ICONS[lead.priority] || TEMP_ICONS.warm}</span>
+              {temp.label}
+            </div>
+            {tempOpen && (
+              <TempPopover
+                current={lead.priority || 'warm'}
+                onSelect={handleTempSelect}
+                onClose={() => setTempOpen(false)}
+              />
+            )}
           </div>
           {scoreData && (() => {
             const g = getScoreGrade(scoreData.score)

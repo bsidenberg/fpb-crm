@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useNavigate } from 'react-router-dom'
@@ -5,8 +6,12 @@ import { formatDistanceToNow, parseISO } from 'date-fns'
 import { TEMPERATURE } from '../lib/stages'
 import { getFollowUpStatus } from '../lib/followup'
 import { getScoreGrade } from '../utils/scoreLeads'
+import { supabase } from '../lib/supabase'
+import { useToast } from '../lib/toast'
 
 const TEMP_MAP = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
+
+const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
 
 function formatValue(v) {
   if (!v) return null
@@ -35,14 +40,74 @@ function FollowUpBadge({ date, status }) {
   }
 }
 
+function TempPopover({ current, onSelect, onClose }) {
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+      style={{
+        position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 200,
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 7,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.14)',
+        overflow: 'hidden',
+        minWidth: 110,
+      }}
+    >
+      {TEMPERATURE.map(t => (
+        <button
+          key={t.id}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onSelect(t.id) }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7,
+            width: '100%', padding: '8px 12px',
+            background: current === t.id ? t.bgColor : 'transparent',
+            border: 'none', cursor: 'pointer',
+            fontSize: 12, fontWeight: current === t.id ? 700 : 400,
+            color: current === t.id ? t.textColor : 'var(--color-text)',
+            transition: 'background 0.1s',
+          }}
+          onMouseEnter={e => { if (current !== t.id) e.currentTarget.style.background = 'var(--color-surface-2)' }}
+          onMouseLeave={e => { if (current !== t.id) e.currentTarget.style.background = 'transparent' }}
+        >
+          <span style={{ fontSize: 13 }}>{TEMP_ICONS[t.id]}</span>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function LeadCard({ lead, overlay = false }) {
   const navigate = useNavigate()
+  const toast = useToast()
   const {
     attributes, listeners, setNodeRef,
     transform, transition, isDragging,
   } = useSortable({ id: lead.id })
 
-  const temp = TEMP_MAP[lead.priority] || TEMP_MAP.warm
+  const [localPriority, setLocalPriority] = useState(lead.priority || 'warm')
+  const [tempOpen, setTempOpen] = useState(false)
+
+  // Sync local state when lead prop updates (e.g. realtime)
+  useEffect(() => {
+    setLocalPriority(lead.priority || 'warm')
+  }, [lead.priority])
+
+  const temp = TEMP_MAP[localPriority] || TEMP_MAP.warm
   const tags = Array.isArray(lead.tags) ? lead.tags : []
   const followStatus = getFollowUpStatus(lead.follow_up_date)
   const isOverdue = followStatus === 'overdue'
@@ -58,6 +123,22 @@ export default function LeadCard({ lead, overlay = false }) {
     transition,
     opacity: isDragging ? 0 : 1,
   }
+
+  const handleTempSelect = useCallback(async (newPriority) => {
+    setTempOpen(false)
+    const prev = localPriority
+    setLocalPriority(newPriority) // optimistic
+    const { error } = await supabase
+      .from('leads')
+      .update({ priority: newPriority })
+      .eq('id', lead.id)
+    if (error) {
+      setLocalPriority(prev)
+      toast('Failed to update temperature', 'error')
+    } else {
+      toast('Temperature updated')
+    }
+  }, [lead.id, localPriority, toast])
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
@@ -107,16 +188,38 @@ export default function LeadCard({ lead, overlay = false }) {
                 </span>
               )
             })()}
-            <div style={{
-              fontSize: 9, fontWeight: 700,
-              color: temp.textColor,
-              background: temp.bgColor,
-              padding: '2px 6px',
-              borderRadius: 3,
-              letterSpacing: '0.7px',
-              textTransform: 'uppercase',
-            }}>
-              {temp.label}
+            {/* Temperature badge — clickable */}
+            <div
+              style={{ position: 'relative' }}
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); setTempOpen(o => !o) }}
+            >
+              <div
+                title="Click to change temperature"
+                style={{
+                  fontSize: 9, fontWeight: 700,
+                  color: temp.textColor,
+                  background: temp.bgColor,
+                  padding: '2px 6px',
+                  borderRadius: 3,
+                  letterSpacing: '0.7px',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 3,
+                  border: tempOpen ? `1px solid ${temp.color}` : '1px solid transparent',
+                  transition: 'border-color 0.1s',
+                }}
+              >
+                <span style={{ fontSize: 10 }}>{TEMP_ICONS[localPriority]}</span>
+                {temp.label}
+              </div>
+              {tempOpen && (
+                <TempPopover
+                  current={localPriority}
+                  onSelect={handleTempSelect}
+                  onClose={() => setTempOpen(false)}
+                />
+              )}
             </div>
           </div>
         </div>
