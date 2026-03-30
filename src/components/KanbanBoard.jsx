@@ -151,10 +151,11 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
       <div style={{
         display: 'flex',
         gap: 12,
-        padding: '0 20px 20px',
+        padding: '16px 20px 20px',
         overflowX: 'auto',
         flex: 1,
-        alignItems: 'flex-start',
+        alignItems: 'stretch',
+        minHeight: 0,
       }}>
         {STAGES.map(stage => (
           <KanbanColumn

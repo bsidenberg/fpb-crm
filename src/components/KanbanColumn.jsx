@@ -73,9 +73,8 @@ export default function KanbanColumn({ stage, leads, onAddLead }) {
           style={{
             flex: 1,
             padding: '8px 8px 4px',
-            minHeight: 120,
+            minHeight: 0,
             overflowY: 'auto',
-            maxHeight: 'calc(100vh - 220px)',
           }}
         >
           {leads.map(lead => (
