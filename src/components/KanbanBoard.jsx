@@ -12,10 +12,16 @@ import { useToast } from '../lib/toast'
 import KanbanColumn from './KanbanColumn'
 import LeadCard from './LeadCard'
 
+function columnSortKey(lead) {
+  return new Date(lead.stage_changed_at || lead.created_at || 0).getTime()
+}
+
 function buildItems(leads) {
   const items = {}
   for (const stage of STAGES) {
-    items[stage.id] = leads.filter(l => l.stage === stage.id)
+    items[stage.id] = leads
+      .filter(l => l.stage === stage.id)
+      .sort((a, b) => columnSortKey(a) - columnSortKey(b))
   }
   return items
 }
