@@ -5,7 +5,7 @@ import {
   useSensor, useSensors,
   closestCorners,
 } from '@dnd-kit/core'
-import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { STAGES } from '../lib/stages'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
@@ -58,88 +58,67 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
 
   const handleDragStart = useCallback(({ active }) => {
     setActiveId(active.id)
-    // Record where this card lives NOW, before any drag-over mutations
     originalContainerRef.current = findContainer(itemsRef.current, active.id)
-    console.log('[Drag] start — card:', active.id, '| column:', originalContainerRef.current)
+    console.log('[Drag] start —', active.id, '| column:', originalContainerRef.current)
     onDragStateChange?.(true)
   }, [onDragStateChange])
 
-  const handleDragOver = useCallback(({ active, over }) => {
-    if (!over) return
-    const activeContainer = findContainer(itemsRef.current, active.id)
-    const overContainer   = findContainer(itemsRef.current, over.id) ?? over.id
-
-    if (!activeContainer || !overContainer || activeContainer === overContainer) return
-
-    const activeItems = itemsRef.current[activeContainer]
-    const overItems   = itemsRef.current[overContainer]
-    const activeIndex = activeItems.findIndex(i => i.id === active.id)
-    const overIndex   = overItems.findIndex(i => i.id === over.id)
-    const insertAt    = overIndex >= 0 ? overIndex : overItems.length
-
-    const newItems = {
-      ...itemsRef.current,
-      [activeContainer]: activeItems.filter(i => i.id !== active.id),
-      [overContainer]: [
-        ...overItems.slice(0, insertAt),
-        { ...activeItems[activeIndex], stage: overContainer },
-        ...overItems.slice(insertAt),
-      ],
-    }
-
-    // Synchronously update the ref so handleDragEnd reads the correct post-over state
-    itemsRef.current = newItems
-    setItems(newItems)
-  }, [])
-
   const handleDragEnd = useCallback(async ({ active, over }) => {
     setActiveId(null)
-    if (!over) return
-
-    const originalContainer = originalContainerRef.current
-    // finalContainer = where the card actually landed after all drag-over moves
-    const finalContainer = findContainer(itemsRef.current, active.id)
-
-    console.log('[Drag] end — card:', active.id, '| from:', originalContainer, '→ to:', finalContainer)
-
-    if (!originalContainer || !finalContainer) return
-
-    if (originalContainer === finalContainer) {
-      // Same column — reorder within column
-      const col    = itemsRef.current[finalContainer]
-      const oldIdx = col.findIndex(i => i.id === active.id)
-      const newIdx = col.findIndex(i => i.id === over.id)
-      if (oldIdx === -1 || newIdx === -1 || oldIdx === newIdx) return
-      const newItems = { ...itemsRef.current, [finalContainer]: arrayMove(col, oldIdx, newIdx) }
-      itemsRef.current = newItems
-      setItems(newItems)
-    } else {
-      // Cross-column drop — persist stage change to Supabase
-      console.log('[Drag] saving stage to Supabase:', active.id, '→', finalContainer)
-
-      const updates = { stage: finalContainer }
-      if (finalContainer === 'quote_sent') updates.quote_sent_at = new Date().toISOString()
-
-      const { error } = await supabase
-        .from('leads')
-        .update(updates)
-        .eq('id', active.id)
-
-      if (error) {
-        console.error('[Drag] stage save FAILED:', error.message, error)
-        toast('Failed to move lead', 'error')
-        // Revert to last server state
-        const reverted = buildItems(leads)
-        itemsRef.current = reverted
-        setItems(reverted)
-      } else {
-        console.log('[Drag] stage saved ✓', active.id, '→', finalContainer)
-        const stageName = STAGES.find(s => s.id === finalContainer)?.label
-        toast(`Moved to ${stageName}`, 'success')
-        onLeadsChange?.()
-      }
-    }
     onDragStateChange?.(false)
+
+    if (!over) {
+      console.log('[Drag] no drop target — cancelled')
+      return
+    }
+
+    // Cards use useDraggable (not useSortable), so over.id is always a column stage ID
+    const leadId      = active.id
+    const targetStage = over.id
+    const sourceStage = originalContainerRef.current
+
+    console.log('[Drag] dropped on:', targetStage)
+
+    if (!sourceStage || !targetStage || sourceStage === targetStage) return
+    if (!(targetStage in itemsRef.current)) return // not a valid column
+
+    const movedLead = itemsRef.current[sourceStage]?.find(l => l.id === leadId)
+    if (!movedLead) return
+
+    // Optimistic update — move card to target column and re-sort
+    const now     = new Date().toISOString()
+    const updates = { stage: targetStage, stage_changed_at: now }
+    if (targetStage === 'quote_sent') updates.quote_sent_at = now
+
+    const updatedLead = { ...movedLead, ...updates }
+    const newItems = {
+      ...itemsRef.current,
+      [sourceStage]: itemsRef.current[sourceStage].filter(l => l.id !== leadId),
+      [targetStage]: [...itemsRef.current[targetStage], updatedLead]
+        .sort((a, b) => columnSortKey(a) - columnSortKey(b)),
+    }
+    itemsRef.current = newItems
+    setItems(newItems)
+
+    console.log('[Drag] updating stage to:', targetStage)
+
+    const { error } = await supabase
+      .from('leads')
+      .update(updates)
+      .eq('id', leadId)
+
+    if (error) {
+      console.error('[Drag] stage save FAILED:', error.message, error)
+      toast('Failed to move lead', 'error')
+      const reverted = buildItems(leads)
+      itemsRef.current = reverted
+      setItems(reverted)
+    } else {
+      console.log('[Drag] stage saved successfully', leadId, '→', targetStage)
+      const stageName = STAGES.find(s => s.id === targetStage)?.label
+      toast(`Moved to ${stageName}`, 'success')
+      onLeadsChange?.()
+    }
   }, [leads, onLeadsChange, toast, onDragStateChange])
 
   const activeCard = activeId
@@ -151,7 +130,6 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div style={{

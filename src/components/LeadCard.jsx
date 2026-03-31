@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { useDraggable } from '@dnd-kit/core'
 import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import { TEMPERATURE } from '../lib/stages'
@@ -94,10 +93,7 @@ function TempPopover({ current, onSelect, onClose }) {
 export default function LeadCard({ lead, overlay = false }) {
   const navigate = useNavigate()
   const toast = useToast()
-  const {
-    attributes, listeners, setNodeRef,
-    transform, transition, isDragging,
-  } = useSortable({ id: lead.id })
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id })
 
   const [localPriority, setLocalPriority] = useState(lead.priority || 'warm')
   const [tempOpen, setTempOpen] = useState(false)
@@ -118,11 +114,7 @@ export default function LeadCard({ lead, overlay = false }) {
     ? '0 0 0 1px rgba(192,39,45,0.2), 0 2px 8px rgba(192,39,45,0.1)'
     : '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)'
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0 : 1,
-  }
+  const style = { opacity: isDragging ? 0 : 1 }
 
   const handleTempSelect = useCallback(async (newPriority) => {
     setTempOpen(false)

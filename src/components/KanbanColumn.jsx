@@ -1,5 +1,4 @@
 import { useDroppable } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import LeadCard from './LeadCard'
 
 function formatValue(v) {
@@ -67,34 +66,32 @@ export default function KanbanColumn({ stage, leads, onAddLead }) {
       </div>
 
       {/* Cards area */}
-      <SortableContext items={leads.map(l => l.id)} strategy={verticalListSortingStrategy}>
-        <div
-          ref={setNodeRef}
-          style={{
-            flex: 1,
-            padding: '8px 8px 4px',
-            minHeight: 0,
-            overflowY: 'auto',
-          }}
-        >
-          {leads.map(lead => (
-            <LeadCard key={lead.id} lead={lead} />
-          ))}
-          {leads.length === 0 && (
-            <div style={{
-              textAlign: 'center',
-              padding: '20px 8px',
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              borderRadius: 6,
-              border: `2px dashed ${isOver ? stage.color : 'var(--border)'}`,
-              transition: 'border-color 0.15s',
-            }}>
-              Drop here
-            </div>
-          )}
-        </div>
-      </SortableContext>
+      <div
+        ref={setNodeRef}
+        style={{
+          flex: 1,
+          padding: '8px 8px 4px',
+          minHeight: 0,
+          overflowY: 'auto',
+        }}
+      >
+        {leads.map(lead => (
+          <LeadCard key={lead.id} lead={lead} />
+        ))}
+        {leads.length === 0 && (
+          <div style={{
+            textAlign: 'center',
+            padding: '20px 8px',
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            borderRadius: 6,
+            border: `2px dashed ${isOver ? stage.color : 'var(--border)'}`,
+            transition: 'border-color 0.15s',
+          }}>
+            Drop here
+          </div>
+        )}
+      </div>
 
       {/* Add lead button */}
       <button
