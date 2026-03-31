@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
 
 function LiveIndicator() {
   const [status, setStatus] = useState('connecting') // 'live' | 'reconnecting' | 'connecting'
@@ -88,6 +89,7 @@ const NAV = [
 
 export default function Layout() {
   const location = useLocation()
+  const { displayName, email, signOut } = useAuth()
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--color-bg)', overflow: 'hidden' }}>
@@ -188,14 +190,48 @@ export default function Layout() {
         <div style={{
           padding: '12px 16px',
           borderTop: '1px solid rgba(255,255,255,0.07)',
-          fontSize: 9,
-          fontWeight: 500,
-          color: 'rgba(255,255,255,0.25)',
-          letterSpacing: '0.3px',
-          lineHeight: 1.7,
         }}>
-          140+ MPH Wind Rated · Made in USA
-          <br />Florida Code Compliant
+          {/* User indicator */}
+          {displayName && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+              {/* Initials avatar */}
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: '#C0272D',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                fontSize: 11, fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.3px',
+              }}>
+                {displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {displayName}
+                </div>
+                <button
+                  onClick={signOut}
+                  style={{
+                    background: 'none', border: 'none', padding: 0,
+                    fontSize: 10, color: 'rgba(255,255,255,0.4)',
+                    cursor: 'pointer', fontWeight: 500, letterSpacing: '0.3px',
+                    transition: 'color 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          )}
+          <div style={{
+            fontSize: 9, fontWeight: 500,
+            color: 'rgba(255,255,255,0.25)',
+            letterSpacing: '0.3px', lineHeight: 1.7,
+          }}>
+            140+ MPH Wind Rated · Made in USA
+            <br />Florida Code Compliant
+          </div>
         </div>
       </aside>
 

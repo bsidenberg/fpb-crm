@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
+import { useAuth } from '../hooks/useAuth'
 import { STAGES, STAGE_MAP, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
 import { calculateScore, getScoreGrade } from '../utils/scoreLeads'
 
@@ -650,6 +651,7 @@ export default function LeadDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { displayName, email: userEmail } = useAuth()
 
   const [lead,       setLead]       = useState(null)
   const [loading,    setLoading]    = useState(true)
@@ -658,11 +660,16 @@ export default function LeadDetail() {
   const [saving,     setSaving]     = useState(false)
   const [note,       setNote]       = useState('')
   const [noteType,   setNoteType]   = useState('note')
-  const [noteAuthor, setNoteAuthor] = useState('Brian')
+  const [noteAuthor, setNoteAuthor] = useState('')
   const [activities, setActivities] = useState([])
   const [addingNote, setAddingNote] = useState(false)
   const [scoreData,  setScoreData]  = useState(null)
   const [tempOpen,   setTempOpen]   = useState(false)
+
+  // Pre-fill author from logged-in user (only if field hasn't been manually edited)
+  useEffect(() => {
+    if (displayName) setNoteAuthor(displayName)
+  }, [displayName])
 
   useEffect(() => {
     fetchLead()
@@ -771,7 +778,7 @@ export default function LeadDetail() {
   const handleAddNote = async () => {
     if (!note.trim()) return
     setAddingNote(true)
-    const author = noteAuthor.trim() || 'Brian'
+    const author = noteAuthor.trim() || displayName || 'Brian'
     const body   = note.trim()
 
     const optimistic = {
@@ -785,7 +792,7 @@ export default function LeadDetail() {
     setActivities(prev => [optimistic, ...prev])
     setNote('')
 
-    const { error } = await supabase.from('activities').insert([{ lead_id: String(id), type: noteType, body, author }])
+    const { error } = await supabase.from('activities').insert([{ lead_id: String(id), type: noteType, body, author, user_email: userEmail || null }])
     if (error) console.error('Activity insert error:', JSON.stringify(error, null, 2))
     setAddingNote(false)
     if (error) {

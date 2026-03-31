@@ -1,12 +1,59 @@
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ToastProvider } from './lib/toast'
+import { supabase } from './lib/supabase'
 import Layout from './components/Layout'
 import Board from './pages/Board'
 import LeadDetail from './pages/LeadDetail'
 import FollowUps from './pages/FollowUps'
 import Analytics from './pages/Analytics'
+import Login from './pages/Login'
 
 export default function App() {
+  const [session, setSession] = useState(undefined) // undefined = loading
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // Loading state
+  if (session === undefined) {
+    return (
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--color-bg)',
+      }}>
+        <div style={{
+          width: 20, height: 20,
+          border: '2px solid var(--color-border)',
+          borderTopColor: '#C0272D',
+          borderRadius: '50%',
+          animation: 'spin 0.7s linear infinite',
+        }} />
+      </div>
+    )
+  }
+
+  // Not logged in
+  if (!session) {
+    return (
+      <ToastProvider>
+        <Login />
+      </ToastProvider>
+    )
+  }
+
   return (
     <ToastProvider>
       <BrowserRouter>
