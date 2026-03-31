@@ -100,25 +100,39 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
     itemsRef.current = newItems
     setItems(newItems)
 
+    console.log('[Drag] leadId:', leadId, typeof leadId)
     console.log('[Drag] updating stage to:', targetStage)
 
+    // Step 1: update stage only — always safe regardless of schema state
     const { error } = await supabase
       .from('leads')
-      .update(updates)
+      .update({ stage: targetStage })
       .eq('id', leadId)
 
     if (error) {
-      console.error('[Drag] stage save FAILED:', error.message, error)
-      toast('Failed to move lead', 'error')
+      console.error('[Drag] stage save FAILED:', JSON.stringify(error, null, 2))
+      toast(`Failed to move lead: ${error.message}`, 'error')
       const reverted = buildItems(leads)
       itemsRef.current = reverted
       setItems(reverted)
-    } else {
-      console.log('[Drag] stage saved successfully', leadId, '→', targetStage)
-      const stageName = STAGES.find(s => s.id === targetStage)?.label
-      toast(`Moved to ${stageName}`, 'success')
-      onLeadsChange?.()
+      return
     }
+
+    console.log('[Drag] stage saved successfully', leadId, '→', targetStage)
+
+    // Step 2: try stage_changed_at separately — silently skipped if column missing
+    const { error: tsError } = await supabase
+      .from('leads')
+      .update({ stage_changed_at: now })
+      .eq('id', leadId)
+
+    if (tsError) {
+      console.warn('[Drag] stage_changed_at update skipped (column may not exist):', tsError.message)
+    }
+
+    const stageName = STAGES.find(s => s.id === targetStage)?.label
+    toast(`Moved to ${stageName}`, 'success')
+    onLeadsChange?.()
   }, [leads, onLeadsChange, toast, onDragStateChange])
 
   const activeCard = activeId
