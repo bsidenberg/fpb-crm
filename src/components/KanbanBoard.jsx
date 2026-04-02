@@ -12,6 +12,10 @@ import { useToast } from '../lib/toast'
 import KanbanColumn from './KanbanColumn'
 import LeadCard from './LeadCard'
 
+// Each column is sorted by stage_changed_at ASC (oldest at top).
+// For leads with null stage_changed_at, created_at is used as fallback.
+// To backfill existing leads in Supabase:
+//   UPDATE leads SET stage_changed_at = created_at WHERE stage_changed_at IS NULL;
 function columnSortKey(lead) {
   return new Date(lead.stage_changed_at || lead.created_at || 0).getTime()
 }

@@ -750,9 +750,10 @@ export default function LeadDetail() {
 
   const handleStageChange = async (newStage) => {
     const prevStage = lead.stage
-    setLead(l => ({ ...l, stage: newStage }))
-    const updates = { stage: newStage }
-    if (newStage === 'quote_sent') updates.quote_sent_at = new Date().toISOString()
+    const now = new Date().toISOString()
+    setLead(l => ({ ...l, stage: newStage, stage_changed_at: now }))
+    const updates = { stage: newStage, stage_changed_at: now }
+    if (newStage === 'quote_sent') updates.quote_sent_at = now
     const { error } = await supabase.from('leads').update(updates).eq('id', id)
     if (error) {
       setLead(l => ({ ...l, stage: prevStage }))
