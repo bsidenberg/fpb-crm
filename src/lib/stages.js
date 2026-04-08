@@ -1,7 +1,8 @@
 export const STAGES = [
   { id: 'new',        label: 'New Lead',    color: '#C0272D', bg: '#FEF2F2'  },
-  { id: 'contacted',  label: 'Contacted',   color: '#D97706', bg: '#FEF3C7'  },
-  { id: 'quote_sent', label: 'Quote Sent',  color: '#7C3AED', bg: '#F5F3FF'  },
+  { id: 'contacted',   label: 'Contacted',   color: '#D97706', bg: '#FEF3C7'  },
+  { id: 'need_price',  label: 'Need Price',  color: '#0891B2', bg: '#ECFEFF'  },
+  { id: 'quote_sent',  label: 'Quote Sent',  color: '#7C3AED', bg: '#F5F3FF'  },
   { id: 'follow_up',  label: 'Follow-Up',   color: '#D97706', bg: '#FEF3C7'  },
   { id: 'won',        label: 'Closed Won',  color: '#16A34A', bg: '#DCFCE7'  },
   { id: 'lost',       label: 'Closed Lost', color: '#6B7280', bg: '#F3F4F6'  },
