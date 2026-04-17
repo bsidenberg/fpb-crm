@@ -238,6 +238,14 @@ function CompactInfo({ lead, scoreData, onStageChange, tempOpen, setTempOpen, on
       </DenseRow>
       <DenseRow label="Barn Size">{lead.barn_size || dash}</DenseRow>
       <DenseRow label="Service Type">{lead.service_type || dash}</DenseRow>
+      <DenseRow label="Timeline">{lead.timeline || dash}</DenseRow>
+      <DenseRow label="Budget Range">{lead.budget_range || dash}</DenseRow>
+      <DenseRow label="Land Owned">
+        {lead.land_owned === true ? 'Yes' : lead.land_owned === false ? 'No' : dash}
+      </DenseRow>
+      <DenseRow label="HOA">
+        {lead.hoa === true ? 'Yes' : lead.hoa === false ? 'No' : dash}
+      </DenseRow>
       <DenseRow label="Source">{lead.source || dash}</DenseRow>
       <DenseRow label="Follow-Up">
         {lead.follow_up_date ? format(parseISO(lead.follow_up_date), 'MMM d, yyyy') : dash}
@@ -578,6 +586,52 @@ function EditForm({ form, set }) {
       </div>
       <div style={grid2}>
         <div style={col}><label style={lbl}>Service Type</label>{sel('service_type', ['Kit Delivery Only', 'Kit + Installation'], 'Select type')}</div>
+        <div style={col}><label style={lbl}>Timeline</label>{sel('timeline', ['As Soon As Possible', '1-3 Months', '3-6 Months', '6-12 Months', 'Just Looking'], 'Select timeline')}</div>
+      </div>
+      <div style={grid2}>
+        <div style={col}><label style={lbl}>Budget Range</label>{inp('budget_range', 'text', '$15,000 - $25,000')}</div>
+        <div style={col}>
+          <label style={lbl}>Land Owned</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[{ val: true, label: 'Yes' }, { val: false, label: 'No' }].map(o => (
+              <button
+                key={String(o.val)}
+                type="button"
+                onClick={() => set('land_owned')(o.val)}
+                style={{
+                  flex: 1, padding: '7px 4px', borderRadius: 6,
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  border: `1px solid ${form.land_owned === o.val ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  background: form.land_owned === o.val ? 'var(--color-accent)' : 'var(--input-bg)',
+                  color: form.land_owned === o.val ? '#fff' : 'var(--color-text-2)',
+                  transition: 'all 0.15s',
+                }}
+              >{o.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={grid2}>
+        <div style={col}>
+          <label style={lbl}>HOA</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[{ val: true, label: 'Yes' }, { val: false, label: 'No' }].map(o => (
+              <button
+                key={String(o.val)}
+                type="button"
+                onClick={() => set('hoa')(o.val)}
+                style={{
+                  flex: 1, padding: '7px 4px', borderRadius: 6,
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  border: `1px solid ${form.hoa === o.val ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  background: form.hoa === o.val ? 'var(--color-accent)' : 'var(--input-bg)',
+                  color: form.hoa === o.val ? '#fff' : 'var(--color-text-2)',
+                  transition: 'all 0.15s',
+                }}
+              >{o.label}</button>
+            ))}
+          </div>
+        </div>
         <div style={col} />
       </div>
       <div style={grid2}>
