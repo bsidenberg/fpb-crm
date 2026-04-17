@@ -237,6 +237,7 @@ function CompactInfo({ lead, scoreData, onStageChange, tempOpen, setTempOpen, on
           : dash}
       </DenseRow>
       <DenseRow label="Barn Size">{lead.barn_size || dash}</DenseRow>
+      <DenseRow label="Service Type">{lead.service_type || dash}</DenseRow>
       <DenseRow label="Source">{lead.source || dash}</DenseRow>
       <DenseRow label="Follow-Up">
         {lead.follow_up_date ? format(parseISO(lead.follow_up_date), 'MMM d, yyyy') : dash}
@@ -574,6 +575,10 @@ function EditForm({ form, set }) {
       <div style={grid2}>
         <div style={col}><label style={lbl}>Est. Value ($)</label>{inp('value', 'number')}</div>
         <div style={col}><label style={lbl}>Barn Size</label>{sel('barn_size', BARN_SIZES, 'Select size')}</div>
+      </div>
+      <div style={grid2}>
+        <div style={col}><label style={lbl}>Service Type</label>{sel('service_type', ['Kit Delivery Only', 'Kit + Installation'], 'Select type')}</div>
+        <div style={col} />
       </div>
       <div style={grid2}>
         <div style={col}><label style={lbl}>Follow-Up Date</label>{inp('follow_up_date', 'date')}</div>

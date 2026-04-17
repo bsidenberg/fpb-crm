@@ -7,7 +7,7 @@ const EMPTY = {
   first_name: '', last_name: '', email: '', phone: '',
   company: '', address: '', city: '', zip: '',
   source: '', stage: 'new',
-  value: '', barn_size: '',
+  value: '', barn_size: '', service_type: '',
   follow_up_date: '', priority: 'warm',
   tags: [],
   notes: '',
@@ -189,6 +189,13 @@ export default function AddLeadModal({ open, onClose, onSaved, defaultStage }) {
             <div style={g2}>
               <Field label="Est. Value ($)"><Input type="number" value={form.value} onChange={set('value')} placeholder="18500" /></Field>
               <Field label="Barn Size"><Sel value={form.barn_size} onChange={set('barn_size')} options={BARN_SIZES} /></Field>
+            </div>
+
+            <div style={g2}>
+              <Field label="Service Type">
+                <Sel value={form.service_type} onChange={set('service_type')} options={['Kit Delivery Only', 'Kit + Installation']} placeholder="Select type" />
+              </Field>
+              <div />
             </div>
 
             <div style={g2}>
