@@ -18,8 +18,8 @@ export const TEMPERATURE = [
 ]
 
 export const LEAD_SOURCES = [
-  'Website', 'Google Ads', 'Facebook', 'Referral',
-  'Cold Call', 'Trade Show', 'Walk-In', 'Other',
+  'Google Organic', 'Google Ads', 'Facebook', 'Referral',
+  'Cold Call', 'Direct', 'AI Search', 'Website', 'Other',
 ]
 
 export const BARN_SIZES = [
