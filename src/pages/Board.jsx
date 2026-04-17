@@ -39,15 +39,31 @@ function StatCard({ label, value, sub, color }) {
 export default function Board() {
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [filterStage, setFilterStage] = useState('')
-  const [filterTemp, setFilterTemp] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [modalStage, setModalStage] = useState('new')
   const [importOpen, setImportOpen] = useState(false)
-  const [filterFollowUp, setFilterFollowUp] = useState('')
-  const [sortBy, setSortBy] = useState('score_desc')
-  const [serviceType, setServiceType] = useState('all') // 'all' | 'kit' | 'turnkey'
+
+  // Filter state — initialised from URL search params so filters survive refresh/share
+  const _p = new URLSearchParams(window.location.search)
+  const [search,        setSearch]        = useState(() => _p.get('q')       || '')
+  const [filterStage,   setFilterStage]   = useState(() => _p.get('stage')   || '')
+  const [filterTemp,    setFilterTemp]    = useState(() => _p.get('temp')    || '')
+  const [filterFollowUp, setFilterFollowUp] = useState(() => _p.get('followup') || '')
+  const [sortBy,        setSortBy]        = useState(() => _p.get('sort')    || 'score_desc')
+  const [serviceType,   setServiceType]   = useState(() => _p.get('svc')     || 'all')
+
+  // Keep URL in sync whenever any filter changes
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (search)                   p.set('q',        search)
+    if (filterStage)              p.set('stage',    filterStage)
+    if (filterTemp)               p.set('temp',     filterTemp)
+    if (filterFollowUp)           p.set('followup', filterFollowUp)
+    if (sortBy !== 'score_desc')  p.set('sort',     sortBy)
+    if (serviceType !== 'all')    p.set('svc',      serviceType)
+    const qs = p.toString()
+    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+  }, [search, filterStage, filterTemp, filterFollowUp, sortBy, serviceType])
 
   const fetchLeads = useCallback(async () => {
     // Fetch leads and activity counts in parallel
