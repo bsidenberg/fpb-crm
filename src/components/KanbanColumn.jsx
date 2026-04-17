@@ -13,7 +13,8 @@ export default function KanbanColumn({ stage, leads, onAddLead }) {
 
   return (
     <div style={{
-      width: 248,
+      minWidth: 260,
+      width: 260,
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',

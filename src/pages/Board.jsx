@@ -467,7 +467,7 @@ export default function Board() {
           Loading pipeline...
         </div>
       ) : (
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', minHeight: 0 }}>
+        <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', display: 'flex', minHeight: 0 }}>
           <KanbanBoard
             leads={sorted}
             onLeadsChange={fetchLeads}
