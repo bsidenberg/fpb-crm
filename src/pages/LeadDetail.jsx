@@ -740,11 +740,17 @@ export default function LeadDetail() {
 
   const handleSave = async () => {
     setSaving(true)
-    const { error } = await supabase.from('leads').update({ ...form }).eq('id', id)
+    // Coerce numeric fields; strip read-only DB columns from the update payload
+    const { id: _id, created_at, updated_at, score, user_email, ...editable } = form
+    const payload = {
+      ...editable,
+      value: form.value !== '' && form.value != null ? Number(form.value) || null : null,
+    }
+    const { error } = await supabase.from('leads').update(payload).eq('id', id)
     setSaving(false)
     if (error) { toast('Save failed: ' + error.message, 'error'); return }
     toast('Lead updated')
-    setLead(form)
+    setLead(prev => ({ ...prev, ...payload }))
     setEditing(false)
   }
 
