@@ -47,6 +47,7 @@ export default function Board() {
   const [importOpen, setImportOpen] = useState(false)
   const [filterFollowUp, setFilterFollowUp] = useState('')
   const [sortBy, setSortBy] = useState('score_desc')
+  const [serviceType, setServiceType] = useState('all') // 'all' | 'kit' | 'turnkey'
 
   const fetchLeads = useCallback(async () => {
     // Fetch leads and activity counts in parallel
@@ -157,7 +158,16 @@ export default function Board() {
     }
   }, [applyLeadChange, fetchLeads])
 
-  const filtered = leads.filter(l => {
+  // Service-type filtered base — used for both KPIs and board leads
+  const serviceFiltered = serviceType === 'all'
+    ? leads
+    : leads.filter(l => {
+        if (serviceType === 'kit')     return l.service_type === 'Kit Delivery Only'
+        if (serviceType === 'turnkey') return l.service_type === 'Kit + Installation'
+        return true
+      })
+
+  const filtered = serviceFiltered.filter(l => {
     if (filterStage && l.stage !== filterStage) return false
     if (filterTemp && l.priority !== filterTemp) return false
     if (filterFollowUp) {
@@ -179,7 +189,7 @@ export default function Board() {
     return 0 // 'newest' — preserve DB order
   })
 
-  const activeLeadsForFollowUp = leads.filter(l => l.stage !== 'won' && l.stage !== 'lost')
+  const activeLeadsForFollowUp = serviceFiltered.filter(l => l.stage !== 'won' && l.stage !== 'lost')
   const followUpCounts = {
     overdue:  activeLeadsForFollowUp.filter(l => getFollowUpStatus(l.follow_up_date) === 'overdue').length,
     today:    activeLeadsForFollowUp.filter(l => getFollowUpStatus(l.follow_up_date) === 'today').length,
@@ -191,10 +201,10 @@ export default function Board() {
     setModalOpen(true)
   }
 
-  // Stats — all derived from `leads` so they update whenever fetchLeads resolves
-  const activeLeads  = leads.filter(l => l.stage !== 'won' && l.stage !== 'lost')
-  const wonLeads     = leads.filter(l => l.stage === 'won')
-  const lostLeads    = leads.filter(l => l.stage === 'lost')
+  // Stats — derived from serviceFiltered so KPIs reflect the active toggle
+  const activeLeads  = serviceFiltered.filter(l => l.stage !== 'won' && l.stage !== 'lost')
+  const wonLeads     = serviceFiltered.filter(l => l.stage === 'won')
+  const lostLeads    = serviceFiltered.filter(l => l.stage === 'lost')
   const closedCount  = wonLeads.length + lostLeads.length
 
   // Pipeline value: only active (non-closed) leads
@@ -206,7 +216,7 @@ export default function Board() {
   // Win rate: won / (won + lost) * 100 — 0% when no closed leads
   const winRate = closedCount > 0 ? Math.round((wonLeads.length / closedCount) * 100) : 0
 
-  const overdueCount = leads.filter(l => {
+  const overdueCount = serviceFiltered.filter(l => {
     if (!l.follow_up_date || l.stage === 'won' || l.stage === 'lost') return false
     return new Date(l.follow_up_date) < new Date()
   }).length
@@ -226,7 +236,7 @@ export default function Board() {
               Sales Pipeline
             </h1>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              {loading ? 'Loading...' : `${leads.length} total leads`}
+              {loading ? 'Loading...' : `${serviceFiltered.length} lead${serviceFiltered.length !== 1 ? 's' : ''}${serviceType !== 'all' ? ' · filtered' : ''}`}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -271,6 +281,44 @@ export default function Board() {
             </button>
           </div>
         </div>
+
+        {/* Service type toggle */}
+        {(() => {
+          const btns = [
+            { id: 'all',     label: 'All' },
+            { id: 'kit',     label: 'Kit Only' },
+            { id: 'turnkey', label: 'Turnkey' },
+          ]
+          return (
+            <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+              {btns.map(b => {
+                const active = serviceType === b.id
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => setServiceType(b.id)}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: 20,
+                      border: active ? 'none' : '1px solid var(--color-border)',
+                      background: active
+                        ? (b.id === 'kit' ? '#C0272D' : b.id === 'turnkey' ? '#2B3A6B' : '#374151')
+                        : 'var(--color-surface)',
+                      color: active ? '#fff' : 'var(--color-text-2)',
+                      fontSize: 12,
+                      fontWeight: active ? 700 : 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      letterSpacing: active ? '0.1px' : 0,
+                    }}
+                  >
+                    {b.label}
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
 
         {/* Stats strip */}
         <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 14 }}>
