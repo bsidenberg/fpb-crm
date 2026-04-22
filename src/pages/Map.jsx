@@ -8,7 +8,7 @@ import DistanceFilterButton from '../components/DistanceFilterButton'
 import { geocodeAddress } from '../lib/geocode'
 import { haversineMiles } from '../lib/haversine'
 
-const GOOGLE_MAPS_LIBRARIES = ['marker']
+const GOOGLE_MAPS_LIBRARIES = []
 const STAGE_COLORS = Object.fromEntries(STAGES.map(s => [s.id, s.color]))
 const STAGE_LABELS = Object.fromEntries(STAGES.map(s => [s.id, s.label]))
 
