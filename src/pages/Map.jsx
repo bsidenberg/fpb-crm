@@ -24,6 +24,24 @@ function formatDate(iso) {
   } catch { return null }
 }
 
+function EyeOpenIcon({ size = 14, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+function EyeClosedIcon({ size = 14, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  )
+}
+
 export default function Map() {
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
@@ -47,7 +65,7 @@ export default function Map() {
     async function fetchLeads() {
       const { data, error } = await supabase
         .from('leads')
-        .select('id, first_name, last_name, company, city, zip, address, latitude, longitude, stage, value, phone, email, follow_up_date, notes')
+        .select('id, first_name, last_name, company, city, zip, address, latitude, longitude, stage, value, phone, email, follow_up_date, notes, created_at')
         .not('latitude', 'is', null)
         .not('longitude', 'is', null)
 
@@ -87,6 +105,17 @@ export default function Map() {
   }, [leads, filterCenter, filterRadius, hiddenStages])
 
   const matchCount = matchingLeads.length
+
+  // All geocoded leads respecting hidden stages, sorted newest first — used in default list panel
+  const allVisibleLeads = useMemo(() => {
+    return leads
+      .filter(l => !hiddenStages.has(l.stage))
+      .sort((a, b) => {
+        const aT = a.created_at ? new Date(a.created_at).getTime() : 0
+        const bT = b.created_at ? new Date(b.created_at).getTime() : 0
+        return bT - aT
+      })
+  }, [leads, hiddenStages])
 
   const toggleStage = (stageId) => {
     setHiddenStages(prev => {
@@ -216,8 +245,6 @@ export default function Map() {
     )
   }
 
-  const panelVisible = (filterCenter && matchingLeads.length > 0) || !!selectedLead
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Error banners */}
@@ -225,10 +252,8 @@ export default function Map() {
         <div style={{
           background: 'rgba(192,39,45,0.1)',
           border: '1px solid rgba(192,39,45,0.3)',
-          color: '#C0272D',
-          fontSize: 13,
-          padding: '10px 20px',
-          flexShrink: 0,
+          color: '#C0272D', fontSize: 13,
+          padding: '10px 20px', flexShrink: 0,
         }}>
           Error loading leads: {error}
         </div>
@@ -237,10 +262,8 @@ export default function Map() {
         <div style={{
           background: 'rgba(192,39,45,0.1)',
           border: '1px solid rgba(192,39,45,0.3)',
-          color: '#C0272D',
-          fontSize: 13,
-          padding: '10px 20px',
-          flexShrink: 0,
+          color: '#C0272D', fontSize: 13,
+          padding: '10px 20px', flexShrink: 0,
         }}>
           Failed to load Google Maps. Check API key and restrictions.
         </div>
@@ -252,19 +275,10 @@ export default function Map() {
         borderBottom: '1px solid var(--color-border)',
         background: 'var(--color-surface)',
         flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
       }}>
         <div>
-          <h1 style={{
-            margin: 0,
-            fontSize: 20,
-            fontWeight: 700,
-            color: 'var(--color-text)',
-            letterSpacing: '-0.3px',
-          }}>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.3px' }}>
             Map
           </h1>
           <div style={{ fontSize: 12, color: 'var(--color-text-3)', marginTop: 2 }}>
@@ -286,240 +300,274 @@ export default function Map() {
         />
       </div>
 
-      {/* Map area */}
-      <div style={{ flex: 1, padding: '20px 24px', overflow: 'auto' }}>
+      {/* Body — flex column holding the map+panel row and the legend */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {!isLoaded && !loadError ? (
           <div style={{
-            background: 'var(--color-surface-2)',
-            border: '0.5px solid var(--color-border)',
-            borderRadius: 8,
-            height: 'calc(100vh - 200px)',
-            minHeight: 500,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--color-text-3)',
-            fontSize: 14,
+            flex: 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--color-text-3)', fontSize: 14,
           }}>
             Loading map...
           </div>
         ) : !loadError ? (
           <>
-            {/* Map container — position:relative so the panel can be absolute inside */}
-            <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '0.5px solid var(--color-border)' }}>
-              <GoogleMap
-                mapContainerStyle={{ width: '100%', height: 'calc(100vh - 200px)', minHeight: 500 }}
-                center={{ lat: 28.5, lng: -81.5 }}
-                zoom={8}
-                onLoad={onMapLoad}
-                options={{
-                  mapTypeControl: false,
-                  streetViewControl: false,
-                  fullscreenControl: true,
-                  zoomControl: true,
-                }}
-              />
+            {/* Map + panel row */}
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-              {/* Side panel */}
-              {panelVisible && (
-                <aside style={{
-                  position: 'absolute',
-                  top: 0, right: 0, bottom: 0,
-                  width: 360,
-                  background: 'var(--color-surface)',
-                  borderLeft: '0.5px solid var(--color-border)',
-                  boxShadow: '-4px 0 16px rgba(0,0,0,0.08)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                  zIndex: 10,
-                }}>
-                  {selectedLead ? (
-                    /* ── VIEW B: Lead detail ── */
-                    <>
-                      {/* Detail header */}
-                      <div style={{
-                        padding: '16px 20px 12px',
-                        borderBottom: '1px solid var(--color-border)',
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                      }}>
-                        {filterCenter ? (
-                          <button
-                            onClick={() => setSelectedLead(null)}
-                            style={{
-                              background: 'none', border: 'none', cursor: 'pointer',
-                              padding: 0, display: 'flex', alignItems: 'center', gap: 4,
-                              fontSize: 12, color: 'var(--color-text-3)', fontWeight: 500,
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.color = 'var(--color-text)'}
-                            onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-3)'}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                              <path d="M19 12H5M12 5l-7 7 7 7" />
-                            </svg>
-                            Back to list
-                          </button>
-                        ) : (
-                          <div />
+              {/* Map column */}
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '16px 0 0 16px' }}>
+                <div style={{ flex: 1, minHeight: 0, borderRadius: 8, overflow: 'hidden', border: '0.5px solid var(--color-border)' }}>
+                  <GoogleMap
+                    mapContainerStyle={{ width: '100%', height: '100%' }}
+                    center={{ lat: 28.5, lng: -81.5 }}
+                    zoom={8}
+                    onLoad={onMapLoad}
+                    options={{
+                      mapTypeControl: false,
+                      streetViewControl: false,
+                      fullscreenControl: true,
+                      zoomControl: true,
+                    }}
+                  />
+                </div>
+
+                {/* Legend — eye-icon toggle chips, below map in map column */}
+                <div style={{ flexShrink: 0, padding: '10px 0 16px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  {STAGES.map(stage => {
+                    const hidden = hiddenStages.has(stage.id)
+                    return (
+                      <button
+                        key={stage.id}
+                        onClick={() => toggleStage(stage.id)}
+                        title={hidden ? `Show ${stage.label}` : `Hide ${stage.label}`}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 8,
+                          padding: '5px 12px', borderRadius: 16,
+                          fontSize: 12, fontWeight: 500,
+                          cursor: 'pointer', transition: 'all 0.15s',
+                          background: 'var(--color-surface)',
+                          border: hidden ? '1px solid var(--color-border)' : `1px solid ${stage.color}`,
+                          color: hidden ? 'var(--color-text-3)' : stage.color,
+                          opacity: hidden ? 0.7 : 1,
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.transform = 'translateY(-1px)'
+                          e.currentTarget.style.background = hidden ? 'var(--color-surface-2)' : `${stage.color}0D`
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.transform = 'translateY(0)'
+                          e.currentTarget.style.background = 'var(--color-surface)'
+                        }}
+                      >
+                        {hidden
+                          ? <EyeClosedIcon size={14} color="var(--color-text-3)" />
+                          : <EyeOpenIcon size={14} color={stage.color} />
+                        }
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                        <span style={{ textDecoration: hidden ? 'line-through' : 'none' }}>{stage.label}</span>
+                      </button>
+                    )
+                  })}
+                  {hiddenStages.size > 0 && (
+                    <button
+                      onClick={() => setHiddenStages(new Set())}
+                      style={{
+                        background: 'none', border: 'none', padding: '3px 6px',
+                        color: 'var(--color-text-3)', fontSize: 12,
+                        textDecoration: 'underline', cursor: 'pointer', marginLeft: 2,
+                      }}
+                    >
+                      Show all
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Side panel — always visible */}
+              <aside style={{
+                width: 360,
+                flexShrink: 0,
+                borderLeft: '0.5px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}>
+                {selectedLead ? (
+                  /* ── STATE A: Lead detail ── */
+                  <>
+                    <div style={{
+                      padding: '14px 20px 10px',
+                      borderBottom: '1px solid var(--color-border)',
+                      flexShrink: 0,
+                    }}>
+                      <button
+                        onClick={() => setSelectedLead(null)}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          padding: 0, display: 'flex', alignItems: 'center', gap: 4,
+                          fontSize: 12, color: 'var(--color-text-3)', fontWeight: 500,
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = 'var(--color-text)'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-3)'}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          <path d="M19 12H5M12 5l-7 7 7 7" />
+                        </svg>
+                        Back to list
+                      </button>
+                    </div>
+
+                    <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.2 }}>
+                          {selectedLead.first_name} {selectedLead.last_name}
+                        </div>
+                        {selectedLead.company && (
+                          <div style={{ fontSize: 13, color: 'var(--color-text-3)', marginTop: 3 }}>
+                            {selectedLead.company}
+                          </div>
                         )}
-                        <button
-                          onClick={() => { setSelectedLead(null); if (filterCenter) setFilterCenter(null) }}
+                      </div>
+
+                      {selectedLead.stage && (
+                        <span style={{
+                          display: 'inline-block', fontSize: 10, fontWeight: 700,
+                          color: '#fff', background: STAGE_COLORS[selectedLead.stage] || '#6B7280',
+                          padding: '2px 8px', borderRadius: 3,
+                          letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 16,
+                        }}>
+                          {STAGE_LABELS[selectedLead.stage] || selectedLead.stage}
+                        </span>
+                      )}
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
+                        {(selectedLead.address || selectedLead.city) && (
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Address</div>
+                            <div style={{ color: 'var(--color-text)' }}>
+                              {selectedLead.address && <div>{selectedLead.address}</div>}
+                              {(selectedLead.city || selectedLead.zip) && (
+                                <div>{[selectedLead.city, selectedLead.zip ? `FL ${selectedLead.zip}` : null].filter(Boolean).join(', ')}</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {selectedLead.value && (
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Value</div>
+                            <div style={{ color: 'var(--color-green)', fontWeight: 600 }}>{formatValue(selectedLead.value)}</div>
+                          </div>
+                        )}
+                        {selectedLead.phone && (
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Phone</div>
+                            <a href={`tel:${selectedLead.phone}`} style={{ color: 'var(--color-accent)', textDecoration: 'none' }}>{selectedLead.phone}</a>
+                          </div>
+                        )}
+                        {selectedLead.email && (
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Email</div>
+                            <a href={`mailto:${selectedLead.email}`} style={{ color: 'var(--color-accent)', textDecoration: 'none', wordBreak: 'break-all' }}>{selectedLead.email}</a>
+                          </div>
+                        )}
+                        {selectedLead.follow_up_date && (
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Follow-up</div>
+                            <div style={{ color: 'var(--color-text)' }}>{formatDate(selectedLead.follow_up_date)}</div>
+                          </div>
+                        )}
+                        {selectedLead.notes && (
+                          <div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Notes</div>
+                            <div style={{ color: 'var(--color-text-3)', fontSize: 12, lineHeight: 1.5, fontStyle: 'italic' }}>{selectedLead.notes}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 20, paddingTop: 16 }}>
+                        <Link
+                          to={`/leads/${selectedLead.id}`}
                           style={{
-                            background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-                            color: 'var(--color-text-3)', display: 'flex', alignItems: 'center',
-                            borderRadius: 4,
+                            display: 'block', textAlign: 'center', padding: '9px 0', borderRadius: 6,
+                            background: 'var(--color-accent)', color: '#fff', fontSize: 13, fontWeight: 600,
+                            textDecoration: 'none', transition: 'background 0.15s',
                           }}
-                          onMouseEnter={e => e.currentTarget.style.color = 'var(--color-text)'}
-                          onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-3)'}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--color-accent-hover)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'var(--color-accent)'}
                         >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                            <path d="M18 6L6 18M6 6l12 12" />
-                          </svg>
-                        </button>
+                          Open full lead →
+                        </Link>
                       </div>
-
-                      {/* Detail body */}
-                      <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
-                        {/* Name + company */}
-                        <div style={{ marginBottom: 8 }}>
-                          <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.2 }}>
-                            {selectedLead.first_name} {selectedLead.last_name}
-                          </div>
-                          {selectedLead.company && (
-                            <div style={{ fontSize: 13, color: 'var(--color-text-3)', marginTop: 3 }}>
-                              {selectedLead.company}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Stage badge */}
-                        {selectedLead.stage && (
-                          <span style={{
-                            display: 'inline-block',
-                            fontSize: 10, fontWeight: 700,
-                            color: '#fff',
-                            background: STAGE_COLORS[selectedLead.stage] || '#6B7280',
-                            padding: '2px 8px',
-                            borderRadius: 3,
-                            letterSpacing: '0.5px',
-                            textTransform: 'uppercase',
-                            marginBottom: 16,
-                          }}>
-                            {STAGE_LABELS[selectedLead.stage] || selectedLead.stage}
-                          </span>
-                        )}
-
-                        {/* Fields */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
-                          {(selectedLead.address || selectedLead.city) && (
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Address</div>
-                              <div style={{ color: 'var(--color-text)' }}>
-                                {selectedLead.address && <div>{selectedLead.address}</div>}
-                                {(selectedLead.city || selectedLead.zip) && (
-                                  <div>{[selectedLead.city, selectedLead.zip ? `FL ${selectedLead.zip}` : null].filter(Boolean).join(', ')}</div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {selectedLead.value && (
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Value</div>
-                              <div style={{ color: 'var(--color-green)', fontWeight: 600 }}>{formatValue(selectedLead.value)}</div>
-                            </div>
-                          )}
-
-                          {selectedLead.phone && (
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Phone</div>
-                              <a href={`tel:${selectedLead.phone}`} style={{ color: 'var(--color-accent)', textDecoration: 'none' }}>{selectedLead.phone}</a>
-                            </div>
-                          )}
-
-                          {selectedLead.email && (
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Email</div>
-                              <a href={`mailto:${selectedLead.email}`} style={{ color: 'var(--color-accent)', textDecoration: 'none', wordBreak: 'break-all' }}>{selectedLead.email}</a>
-                            </div>
-                          )}
-
-                          {selectedLead.follow_up_date && (
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Follow-up</div>
-                              <div style={{ color: 'var(--color-text)' }}>{formatDate(selectedLead.follow_up_date)}</div>
-                            </div>
-                          )}
-
-                          {selectedLead.notes && (
-                            <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Notes</div>
-                              <div style={{ color: 'var(--color-text-3)', fontSize: 12, lineHeight: 1.5, fontStyle: 'italic' }}>{selectedLead.notes}</div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Link */}
-                        <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 20, paddingTop: 16 }}>
-                          <Link
-                            to={`/leads/${selectedLead.id}`}
-                            style={{
-                              display: 'block', textAlign: 'center',
-                              padding: '9px 0', borderRadius: 6,
-                              background: 'var(--color-accent)',
-                              color: '#fff', fontSize: 13, fontWeight: 600,
-                              textDecoration: 'none', transition: 'background 0.15s',
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'var(--color-accent-hover)'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'var(--color-accent)'}
-                          >
-                            Open full lead →
-                          </Link>
-                        </div>
+                    </div>
+                  </>
+                ) : (
+                  /* ── STATE B / C: Lead list ── */
+                  <>
+                    {/* List header */}
+                    <div style={{
+                      padding: '16px 20px 12px',
+                      borderBottom: '1px solid var(--color-border)',
+                      flexShrink: 0,
+                    }}>
+                      <div style={{ fontSize: 24, fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.2 }}>
+                        {filterCenter ? matchCount : allVisibleLeads.length} lead{(filterCenter ? matchCount : allVisibleLeads.length) !== 1 ? 's' : ''}
                       </div>
-                    </>
-                  ) : (
-                    /* ── VIEW A: Lead list ── */
-                    <>
-                      {/* List header */}
-                      <div style={{
-                        padding: '16px 20px 12px',
-                        borderBottom: '1px solid var(--color-border)',
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                      }}>
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>Leads in radius</div>
-                          <div style={{ fontSize: 11, color: 'var(--color-text-3)', marginTop: 2, lineHeight: 1.4 }}>
-                            {matchCount} within {filterRadius}mi of {filterCenter.address}
-                          </div>
-                        </div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-3)', marginTop: 4 }}>
+                        {filterCenter
+                          ? `Within ${filterRadius} miles of ${filterCenter.address}`
+                          : 'All geocoded leads'
+                        }
+                      </div>
+                      {/* Clear filter link — only in State B */}
+                      {filterCenter && (
                         <button
                           onClick={() => { setFilterCenter(null); setSelectedLead(null) }}
                           style={{
-                            background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-                            color: 'var(--color-text-3)', display: 'flex', alignItems: 'center',
-                            borderRadius: 4, flexShrink: 0,
+                            background: 'none', border: 'none', padding: 0, marginTop: 6,
+                            color: 'var(--color-text-3)', fontSize: 11,
+                            textDecoration: 'underline', cursor: 'pointer',
                           }}
-                          onMouseEnter={e => e.currentTarget.style.color = 'var(--color-text)'}
-                          onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-3)'}
                         >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                            <path d="M18 6L6 18M6 6l12 12" />
-                          </svg>
+                          Clear filter
                         </button>
-                      </div>
+                      )}
+                    </div>
 
-                      {/* List body */}
-                      <div style={{ flex: 1, overflow: 'auto' }}>
-                        {matchingLeads.map(lead => (
+                    {/* List body */}
+                    <div style={{ flex: 1, overflow: 'auto' }}>
+                      {(() => {
+                        const displayList = filterCenter ? matchingLeads : allVisibleLeads
+                        if (hiddenStages.size === STAGES.length) {
+                          return (
+                            <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--color-text-3)', fontSize: 13 }}>
+                              All stages are hidden. Click a stage in the legend to show its leads.
+                            </div>
+                          )
+                        }
+                        if (displayList.length === 0) {
+                          return (
+                            <div style={{
+                              display: 'flex', flexDirection: 'column',
+                              alignItems: 'center', justifyContent: 'center',
+                              padding: '48px 20px', color: 'var(--color-text-3)', textAlign: 'center',
+                            }}>
+                              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                strokeWidth={1.5} style={{ marginBottom: 12, opacity: 0.4 }}>
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                                <circle cx="12" cy="10" r="3" />
+                              </svg>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-2)', marginBottom: 4 }}>
+                                {filterCenter ? 'No leads in this radius' : 'No geocoded leads yet'}
+                              </div>
+                              <div style={{ fontSize: 12 }}>
+                                {filterCenter ? 'Try increasing the radius or clearing stage filters.' : 'Add address data to leads to see them here.'}
+                              </div>
+                            </div>
+                          )
+                        }
+                        return displayList.map(lead => (
                           <button
                             key={lead.id}
                             onClick={() => setSelectedLead(lead)}
@@ -541,56 +589,22 @@ export default function Map() {
                                 {lead.first_name} {lead.last_name}
                               </div>
                               <div style={{ fontSize: 12, color: 'var(--color-text-3)', marginTop: 1 }}>
-                                {[lead.city, `${Math.round(lead._distance)}mi`].filter(Boolean).join(' · ')}
+                                {filterCenter
+                                  ? [lead.city, lead._distance != null ? `${Math.round(lead._distance)}mi` : null].filter(Boolean).join(' · ')
+                                  : lead.city || ''
+                                }
                               </div>
                             </span>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ flexShrink: 0, color: 'var(--color-border)' }}>
                               <path d="M9 18l6-6-6-6" />
                             </svg>
                           </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </aside>
-              )}
-            </div>
-
-            {/* Legend */}
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
-              {STAGES.map(stage => {
-                const hidden = hiddenStages.has(stage.id)
-                return (
-                  <button
-                    key={stage.id}
-                    onClick={() => toggleStage(stage.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      padding: '3px 6px', borderRadius: 4,
-                      fontSize: 12, color: 'var(--color-text-3)',
-                      opacity: hidden ? 0.4 : 1,
-                      transition: 'opacity 0.15s',
-                    }}
-                    title={hidden ? `Show ${stage.label}` : `Hide ${stage.label}`}
-                  >
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: stage.color, flexShrink: 0, opacity: 1 }} />
-                    <span style={{ textDecoration: hidden ? 'line-through' : 'none' }}>{stage.label}</span>
-                  </button>
-                )
-              })}
-              {hiddenStages.size > 0 && (
-                <button
-                  onClick={() => setHiddenStages(new Set())}
-                  style={{
-                    background: 'none', border: 'none', padding: '3px 6px',
-                    color: 'var(--color-text-3)', fontSize: 12,
-                    textDecoration: 'underline', cursor: 'pointer', marginLeft: 2,
-                  }}
-                >
-                  Show all
-                </button>
-              )}
+                        ))
+                      })()}
+                    </div>
+                  </>
+                )}
+              </aside>
             </div>
           </>
         ) : null}
