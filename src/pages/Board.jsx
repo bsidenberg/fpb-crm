@@ -3,9 +3,12 @@ import { supabase } from '../lib/supabase'
 import { STAGES, TEMPERATURE } from '../lib/stages'
 import { getFollowUpStatus } from '../lib/followup'
 import { calculateScore } from '../utils/scoreLeads'
+import { geocodeAddress } from '../lib/geocode'
+import { filterLeadsByRadius } from '../lib/haversine'
 import KanbanBoard from '../components/KanbanBoard'
 import AddLeadModal from '../components/AddLeadModal'
 import ImportModal from '../components/ImportModal'
+import DistanceFilterButton from '../components/DistanceFilterButton'
 
 function StatCard({ label, value, sub, color }) {
   return (
@@ -42,6 +45,11 @@ export default function Board() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalStage, setModalStage] = useState('new')
   const [importOpen, setImportOpen] = useState(false)
+
+  // Distance filter state
+  const [filterCenter,   setFilterCenter]   = useState(null)  // { lat, lng, address } | null
+  const [filterRadius,   setFilterRadius]   = useState(50)
+  const [filterApplying, setFilterApplying] = useState(false)
 
   // Filter state — initialised from URL search params so filters survive refresh/share
   const _p = new URLSearchParams(window.location.search)
@@ -205,6 +213,15 @@ export default function Board() {
     return 0 // 'newest' — preserve DB order
   })
 
+  // Distance annotation — adds _distance and _inRadius to each lead
+  const annotatedLeads = filterCenter
+    ? filterLeadsByRadius(sorted, filterCenter.lat, filterCenter.lng, filterRadius)
+    : sorted.map(l => ({ ...l, _distance: null, _inRadius: null }))
+
+  const matchCount = filterCenter
+    ? annotatedLeads.filter(l => l._distance != null && l._distance <= filterRadius).length
+    : 0
+
   const activeLeadsForFollowUp = serviceFiltered.filter(l => l.stage !== 'won' && l.stage !== 'lost')
   const followUpCounts = {
     overdue:  activeLeadsForFollowUp.filter(l => getFollowUpStatus(l.follow_up_date) === 'overdue').length,
@@ -255,7 +272,26 @@ export default function Board() {
               {loading ? 'Loading...' : `${serviceFiltered.length} lead${serviceFiltered.length !== 1 ? 's' : ''}${serviceType !== 'all' ? ' · filtered' : ''}`}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <DistanceFilterButton
+              centerAddress={filterCenter?.address || null}
+              radiusMiles={filterRadius}
+              matchCount={matchCount}
+              totalCount={serviceFiltered.length}
+              onApply={async ({ address, radius }) => {
+                setFilterApplying(true)
+                const result = await geocodeAddress(address)
+                if (!result) {
+                  alert('Could not find that address')
+                  setFilterApplying(false)
+                  return
+                }
+                setFilterCenter({ lat: result.latitude, lng: result.longitude, address })
+                setFilterRadius(radius)
+                setFilterApplying(false)
+              }}
+              onClear={() => setFilterCenter(null)}
+            />
             <button
               onClick={() => setImportOpen(true)}
               style={{
@@ -469,10 +505,11 @@ export default function Board() {
       ) : (
         <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', display: 'flex', minHeight: 0 }}>
           <KanbanBoard
-            leads={sorted}
+            leads={annotatedLeads}
             onLeadsChange={fetchLeads}
             onAddLead={handleAddLead}
             onDragStateChange={handleDragStateChange}
+            filterRadius={filterCenter ? filterRadius : null}
           />
         </div>
       )}

@@ -10,6 +10,7 @@ import Analytics from './pages/Analytics'
 import Login from './pages/Login'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
+import Map from './pages/Map'
 
 export default function App() {
   const [session, setSession] = useState(undefined) // undefined = loading
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="followups" element={<FollowUps />} />
             <Route path="projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectDetail />} />
+            <Route path="map" element={<Map />} />
             <Route path="analytics" element={<Analytics />} />
           </Route>
         </Routes>

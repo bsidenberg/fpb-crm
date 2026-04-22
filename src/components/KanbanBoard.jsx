@@ -35,7 +35,7 @@ function findContainer(items, id) {
   return Object.keys(items).find(key => items[key].some(item => item.id === id))
 }
 
-export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragStateChange }) {
+export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragStateChange, filterRadius }) {
   const toast = useToast()
   const [items, setItems] = useState(() => buildItems(leads))
   const [activeId, setActiveId] = useState(null)
@@ -165,6 +165,7 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
             stage={stage}
             leads={items[stage.id] || []}
             onAddLead={onAddLead}
+            filterRadius={filterRadius}
           />
         ))}
       </div>

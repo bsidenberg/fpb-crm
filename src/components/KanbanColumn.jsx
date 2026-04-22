@@ -6,7 +6,7 @@ function formatValue(v) {
   return '$' + Number(v).toLocaleString()
 }
 
-export default function KanbanColumn({ stage, leads, onAddLead }) {
+export default function KanbanColumn({ stage, leads, onAddLead, filterRadius }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
 
   const totalValue = leads.reduce((sum, l) => sum + (Number(l.value) || 0), 0)
@@ -56,7 +56,10 @@ export default function KanbanColumn({ stage, leads, onAddLead }) {
             padding: '1px 7px',
             borderRadius: 10,
           }}>
-            {leads.length}
+            {filterRadius != null
+              ? `${leads.filter(l => l._distance != null && l._distance <= filterRadius).length}/${leads.length}`
+              : leads.length
+            }
           </span>
         </div>
         {totalValue > 0 && (

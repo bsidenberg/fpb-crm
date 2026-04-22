@@ -114,7 +114,11 @@ export default function LeadCard({ lead, overlay = false }) {
     ? '0 0 0 1px rgba(192,39,45,0.2), 0 2px 8px rgba(192,39,45,0.1)'
     : '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)'
 
-  const style = { opacity: isDragging ? 0 : 1 }
+  const isOutOfRadius = lead._distance != null && lead._inRadius === false
+  const style = {
+    opacity: isDragging ? 0 : (isOutOfRadius ? 0.35 : 1),
+    pointerEvents: isOutOfRadius ? 'none' : undefined,
+  }
 
   const handleTempSelect = useCallback(async (newPriority) => {
     setTempOpen(false)
@@ -235,10 +239,15 @@ export default function LeadCard({ lead, overlay = false }) {
           </div>
         )}
 
-        {/* Company / city */}
-        {(lead.company || lead.city) && (
+        {/* Company / city / distance */}
+        {(lead.company || lead.city || lead._distance != null) && (
           <div style={{ fontSize: 11, color: 'var(--color-text-2)', marginTop: 2, lineHeight: 1.3 }}>
             {[lead.company, lead.city].filter(Boolean).join(' · ')}
+            {lead._distance != null && (
+              <span style={{ color: 'var(--color-text-3)' }}>
+                {(lead.company || lead.city) ? ' · ' : ''}{Math.round(lead._distance)}mi
+              </span>
+            )}
           </div>
         )}
 
