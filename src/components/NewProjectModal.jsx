@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import LeadAutocomplete from './LeadAutocomplete'
 
 const EMPTY = {
   name: '',
@@ -14,6 +15,7 @@ const EMPTY = {
   contract_amount: '',
   target_close_date: '',
   notes: '',
+  lead_id: null,
 }
 
 const fi = {
@@ -57,28 +59,47 @@ function Input({ value, onChange, type = 'text', placeholder, step }) {
 }
 
 export default function NewProjectModal({ isOpen, onClose, onCreated, prefill = null }) {
-  const [form, setForm]       = useState(EMPTY)
-  const [saving, setSaving]   = useState(false)
+  const [form, setForm]           = useState(EMPTY)
+  const [saving, setSaving]       = useState(false)
   const [insertErr, setInsertErr] = useState(null)
   const [validErr, setValidErr]   = useState(null)
+  // Full lead object for display in LeadAutocomplete when a lead is linked
+  const [linkedLead, setLinkedLead] = useState(null)
 
   // Reset form when modal opens; populate from prefill if provided
   useEffect(() => {
     if (isOpen) {
-      setForm(prefill ? {
-        ...EMPTY,
-        name:            prefill.name            ?? '',
-        project_type:    prefill.project_type    ?? '',
-        customer_name:   prefill.customer_name   ?? '',
-        customer_email:  prefill.customer_email  ?? '',
-        customer_phone:  prefill.customer_phone  ?? '',
-        site_address:    prefill.site_address    ?? '',
-        site_city:       prefill.site_city       ?? '',
-        site_county:     prefill.site_county     ?? '',
-        building_size:   prefill.building_size   ?? '',
-        contract_amount: prefill.contract_amount != null ? String(prefill.contract_amount) : '',
-        notes:           prefill.notes           ?? '',
-      } : EMPTY)
+      if (prefill) {
+        setForm({
+          ...EMPTY,
+          name:            prefill.name            ?? '',
+          project_type:    prefill.project_type    ?? '',
+          customer_name:   prefill.customer_name   ?? '',
+          customer_email:  prefill.customer_email  ?? '',
+          customer_phone:  prefill.customer_phone  ?? '',
+          site_address:    prefill.site_address    ?? '',
+          site_city:       prefill.site_city       ?? '',
+          site_county:     prefill.site_county     ?? '',
+          building_size:   prefill.building_size   ?? '',
+          contract_amount: prefill.contract_amount != null ? String(prefill.contract_amount) : '',
+          notes:           prefill.notes           ?? '',
+          lead_id:         prefill.lead_id         ?? null,
+        })
+        // If prefill has a lead_id but no full lead object, fetch it for the chip display
+        if (prefill.lead_id) {
+          supabase
+            .from('leads')
+            .select('id, first_name, last_name, city, phone, email, stage')
+            .eq('id', prefill.lead_id)
+            .single()
+            .then(({ data }) => setLinkedLead(data || null))
+        } else {
+          setLinkedLead(null)
+        }
+      } else {
+        setForm(EMPTY)
+        setLinkedLead(null)
+      }
       setSaving(false)
       setInsertErr(null)
       setValidErr(null)
@@ -97,6 +118,30 @@ export default function NewProjectModal({ isOpen, onClose, onCreated, prefill = 
   }, [isOpen, handleKeyDown])
 
   const set = key => val => setForm(prev => ({ ...prev, [key]: val }))
+
+  const handleLeadSelect = useCallback((lead) => {
+    setLinkedLead(lead)
+    setForm(prev => ({
+      ...prev,
+      name:            lead.barn_size ? `${lead.last_name} — ${lead.barn_size}` : (lead.last_name || ''),
+      customer_name:   `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+      customer_email:  lead.email    || '',
+      customer_phone:  lead.phone    || '',
+      site_address:    lead.address  || '',
+      site_city:       lead.city     || '',
+      site_county:     '',
+      building_size:   lead.barn_size || '',
+      contract_amount: lead.value != null ? String(lead.value) : '',
+      notes:           `Linked from lead ${lead.id}`,
+      lead_id:         lead.id,
+      // preserve project_type — user still picks Kit vs Turnkey
+    }))
+  }, [])
+
+  const handleLeadClear = useCallback(() => {
+    setLinkedLead(null)
+    setForm(prev => ({ ...prev, lead_id: null }))
+  }, [])
 
   const orNull = str => (str && str.trim() !== '') ? str.trim() : null
 
@@ -127,7 +172,7 @@ export default function NewProjectModal({ isOpen, onClose, onCreated, prefill = 
       target_close_date: orNull(form.target_close_date),
       notes:            orNull(form.notes),
     }
-    if (prefill?.lead_id) payload.lead_id = prefill.lead_id
+    if (form.lead_id) payload.lead_id = form.lead_id
 
     const { data: newProject, error: insertError } = await supabase
       .from('projects')
@@ -196,6 +241,19 @@ export default function NewProjectModal({ isOpen, onClose, onCreated, prefill = 
 
         <form onSubmit={handleSubmit} style={{ overflowY: 'auto', flex: 1 }}>
           <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Link to existing lead */}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={lbl}>Link to existing lead <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+              <div style={{ fontSize: 11, color: 'var(--color-text-3)', marginBottom: 6, lineHeight: 1.4 }}>
+                Select a lead to auto-fill customer and address info. Leave blank to create a standalone project.
+              </div>
+              <LeadAutocomplete
+                selectedLead={linkedLead}
+                onSelect={handleLeadSelect}
+                onClear={handleLeadClear}
+              />
+            </div>
 
             {/* Insert error banner */}
             {insertErr && (
