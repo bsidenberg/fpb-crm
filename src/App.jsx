@@ -8,6 +8,8 @@ import LeadDetail from './pages/LeadDetail'
 import FollowUps from './pages/FollowUps'
 import Analytics from './pages/Analytics'
 import Login from './pages/Login'
+import Projects from './pages/Projects'
+import ProjectDetail from './pages/ProjectDetail'
 
 export default function App() {
   const [session, setSession] = useState(undefined) // undefined = loading
@@ -62,6 +64,8 @@ export default function App() {
             <Route index element={<Board />} />
             <Route path="leads/:id" element={<LeadDetail />} />
             <Route path="followups" element={<FollowUps />} />
+            <Route path="projects" element={<Projects />} />
+            <Route path="projects/:id" element={<ProjectDetail />} />
             <Route path="analytics" element={<Analytics />} />
           </Route>
         </Routes>

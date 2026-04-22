@@ -6,6 +6,7 @@ import { useToast } from '../lib/toast'
 import { useAuth } from '../hooks/useAuth'
 import { STAGES, STAGE_MAP, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
 import { calculateScore, getScoreGrade } from '../utils/scoreLeads'
+import NewProjectModal from '../components/NewProjectModal'
 
 const TEMP_MAP   = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
@@ -712,18 +713,19 @@ export default function LeadDetail() {
   const toast = useToast()
   const { displayName, email: userEmail } = useAuth()
 
-  const [lead,       setLead]       = useState(null)
-  const [loading,    setLoading]    = useState(true)
-  const [editing,    setEditing]    = useState(false)
-  const [form,       setForm]       = useState({})
-  const [saving,     setSaving]     = useState(false)
-  const [note,       setNote]       = useState('')
-  const [noteType,   setNoteType]   = useState('note')
-  const [noteAuthor, setNoteAuthor] = useState('')
-  const [activities, setActivities] = useState([])
-  const [addingNote, setAddingNote] = useState(false)
-  const [scoreData,  setScoreData]  = useState(null)
-  const [tempOpen,   setTempOpen]   = useState(false)
+  const [lead,            setLead]            = useState(null)
+  const [loading,         setLoading]         = useState(true)
+  const [editing,         setEditing]         = useState(false)
+  const [form,            setForm]            = useState({})
+  const [saving,          setSaving]          = useState(false)
+  const [note,            setNote]            = useState('')
+  const [noteType,        setNoteType]        = useState('note')
+  const [noteAuthor,      setNoteAuthor]      = useState('')
+  const [activities,      setActivities]      = useState([])
+  const [addingNote,      setAddingNote]      = useState(false)
+  const [scoreData,       setScoreData]       = useState(null)
+  const [tempOpen,        setTempOpen]        = useState(false)
+  const [convertModalOpen, setConvertModalOpen] = useState(false)
 
   // Pre-fill author from logged-in user (only if field hasn't been manually edited)
   useEffect(() => {
@@ -1001,6 +1003,14 @@ export default function LeadDetail() {
             </>
           ) : (
             <>
+              {lead.stage === 'won' && (
+                <button
+                  onClick={() => setConvertModalOpen(true)}
+                  style={{ padding: '7px 14px', borderRadius: 6, background: 'var(--red)', border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Convert to project
+                </button>
+              )}
               <button
                 onClick={() => setEditing(true)}
                 style={{ padding: '7px 14px', borderRadius: 6, background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 12, cursor: 'pointer' }}
@@ -1082,6 +1092,30 @@ export default function LeadDetail() {
             </>
           )}
         </div>
+
+        {/* Convert to project modal */}
+        <NewProjectModal
+          isOpen={convertModalOpen}
+          onClose={() => setConvertModalOpen(false)}
+          prefill={lead ? {
+            name:           lead.barn_size ? `${lead.last_name} — ${lead.barn_size}` : lead.last_name,
+            project_type:   null,
+            customer_name:  `${lead.first_name} ${lead.last_name}`.trim(),
+            customer_email: lead.email    || null,
+            customer_phone: lead.phone    || null,
+            site_address:   lead.address  || null,
+            site_city:      lead.city     || null,
+            site_county:    null,
+            building_size:  lead.barn_size || null,
+            contract_amount: lead.value   || null,
+            notes:          `Converted from lead ${lead.id}`,
+            lead_id:        lead.id,
+          } : null}
+          onCreated={newProject => {
+            setConvertModalOpen(false)
+            navigate(`/projects/${newProject.id}`)
+          }}
+        />
 
         {/* RIGHT — activity timeline (70%) */}
         <div style={{

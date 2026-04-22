@@ -74,6 +74,16 @@ const NAV = [
     ),
   },
   {
+    to: '/projects',
+    exact: false,
+    label: 'Projects',
+    icon: (
+      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path d="M3 7h18M3 12h18M3 17h12" />
+      </svg>
+    ),
+  },
+  {
     to: '/analytics',
     exact: false,
     label: 'Analytics',
