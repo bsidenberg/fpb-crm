@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
+import { geocodeLead } from '../lib/geocode'
 import { STAGES, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
 
 const EMPTY = {
@@ -118,6 +119,20 @@ export default function AddLeadModal({ open, onClose, onSaved, defaultStage }) {
         body: notes.trim(),
         author: 'Brian',
       }])
+    }
+    // Fire-and-forget background geocode (only if there's address data to geocode)
+    if ((form.address || form.city || form.zip) && data?.id) {
+      geocodeLead({ address: form.address, city: form.city, zip: form.zip })
+        .then(result => {
+          if (result) {
+            supabase.from('leads').update({
+              latitude:    result.latitude,
+              longitude:   result.longitude,
+              geocoded_at: new Date().toISOString(),
+            }).eq('id', data.id).then(() => { /* silent */ })
+          }
+        })
+        .catch(err => console.warn('[geocode] background geocode failed:', err))
     }
     setSaving(false)
     toast(`${form.first_name} ${form.last_name} added!`)

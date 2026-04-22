@@ -1,58 +1,60 @@
 /**
- * geocode.js — client-side Google Geocoding API wrapper
+ * geocode.js — geocoding via Supabase edge function proxy
  *
- * Requires: VITE_GOOGLE_MAPS_API_KEY in .env
+ * Calls /functions/v1/geocode instead of Google directly.
+ * No Google API key in browser code — the edge function holds the server key.
+ *
+ * Requires: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env
  * All functions return null on failure — never throw.
  */
 
-const GEOCODE_BASE = 'https://maps.googleapis.com/maps/api/geocode/json'
-
 /**
  * geocodeAddress(addressString)
- * Geocodes a free-form address string.
+ * Geocodes a free-form address string via the edge function.
  * Returns { latitude, longitude, formatted_address } or null.
  */
 export async function geocodeAddress(addressString) {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+  const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL
+  const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-  if (!apiKey) {
-    console.error('[geocode] VITE_GOOGLE_MAPS_API_KEY is not set.')
+  if (!supabaseUrl || !supabaseAnon) {
+    console.error('[geocode] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is not set.')
     return null
   }
 
-  if (!addressString || !addressString.trim()) {
-    return null
-  }
+  if (!addressString || !addressString.trim()) return null
 
-  const url =
-    `${GEOCODE_BASE}?address=${encodeURIComponent(addressString.trim())}` +
-    `&key=${apiKey}&region=us&components=country:US`
+  const url = `${supabaseUrl}/functions/v1/geocode`
 
   try {
-    const res  = await fetch(url)
-    const data = await res.json()
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${supabaseAnon}`,
+        'apikey':        supabaseAnon,
+      },
+      body: JSON.stringify({ address: addressString }),
+    })
 
-    if (data.status === 'OK' && data.results.length > 0) {
-      const result   = data.results[0]
-      const { lat, lng } = result.geometry.location
-      return {
-        latitude:          lat,
-        longitude:         lng,
-        formatted_address: result.formatted_address,
-      }
-    }
-
-    if (data.status === 'ZERO_RESULTS') {
+    if (res.status === 404) {
       console.warn(`[geocode] No results for: "${addressString}"`)
       return null
     }
 
-    // All other error statuses
-    console.error(
-      `[geocode] API error — status: ${data.status}`,
-      data.error_message ? `— ${data.error_message}` : ''
-    )
-    return null
+    if (!res.ok) {
+      let detail = ''
+      try { detail = await res.text() } catch { /* ignore */ }
+      console.error(`[geocode] Edge function error — status: ${res.status}`, detail)
+      return null
+    }
+
+    const data = await res.json()
+    return {
+      latitude:          data.latitude,
+      longitude:         data.longitude,
+      formatted_address: data.formatted_address,
+    }
 
   } catch (err) {
     console.error('[geocode] Network error:', err)
@@ -90,9 +92,11 @@ export async function geocodeLead(lead) {
 
 /**
  * isGeocodingConfigured()
- * Returns true if a plausible Google API key is present in env.
+ * Returns true if Supabase env vars are present (edge function will handle the Google key).
  */
 export function isGeocodingConfigured() {
-  const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
-  return typeof key === 'string' && key.startsWith('AIzaSy') && key.length >= 30
+  const url  = import.meta.env.VITE_SUPABASE_URL
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY
+  return typeof url === 'string' && url.length > 0 &&
+         typeof anon === 'string' && anon.length > 0
 }

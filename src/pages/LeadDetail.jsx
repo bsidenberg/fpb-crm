@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { STAGES, STAGE_MAP, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
 import { calculateScore, getScoreGrade } from '../utils/scoreLeads'
 import NewProjectModal from '../components/NewProjectModal'
+import { geocodeLead } from '../lib/geocode'
 
 const TEMP_MAP   = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
@@ -80,7 +81,7 @@ function TempPopover({ current, onSelect, onClose }) {
 // ─── ActivityIcon ────────────────────────────────────────────────────────────
 function ActivityIcon({ type, size = 13 }) {
   const aType = ACTIVITY_TYPES.find(t => t.id === type) || ACTIVITY_TYPES[0]
-  const s = { width: size, height: size, flexShrink: 0 }
+  const s = { width: size, height: size, style: { flexShrink: 0 } }
   const c = TYPE_COLORS[type] || TYPE_COLORS.note
   const stroke = c.badge
   if (type === 'call') return (
@@ -807,12 +808,27 @@ export default function LeadDetail() {
       ...editable,
       value: form.value !== '' && form.value != null ? Number(form.value) || null : null,
     }
+    const addrChanged = (form.address !== lead.address) || (form.city !== lead.city) || (form.zip !== lead.zip)
     const { error } = await supabase.from('leads').update(payload).eq('id', id)
     setSaving(false)
     if (error) { toast('Save failed: ' + error.message, 'error'); return }
     toast('Lead updated')
     setLead(prev => ({ ...prev, ...payload }))
     setEditing(false)
+    // Fire-and-forget re-geocode if address fields changed
+    if (addrChanged && (form.address || form.city || form.zip)) {
+      geocodeLead({ address: form.address, city: form.city, zip: form.zip })
+        .then(result => {
+          if (result) {
+            supabase.from('leads').update({
+              latitude:    result.latitude,
+              longitude:   result.longitude,
+              geocoded_at: new Date().toISOString(),
+            }).eq('id', id).then(() => { /* silent */ })
+          }
+        })
+        .catch(err => console.warn('[geocode] background re-geocode failed:', err))
+    }
   }
 
   const handleStageChange = async (newStage) => {
