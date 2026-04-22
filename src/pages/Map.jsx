@@ -51,7 +51,7 @@ export default function Map() {
   const [filterRadius, setFilterRadius] = useState(50)
   const [hiddenStages, setHiddenStages] = useState(new Set())
 
-  const mapRef = useRef(null)
+  const [mapInstance, setMapInstance] = useState(null)
   const clustererRef = useRef(null)
   const circleRef = useRef(null)
 
@@ -127,7 +127,7 @@ export default function Map() {
   }
 
   const onMapLoad = useCallback((map) => {
-    mapRef.current = map
+    setMapInstance(map)
     if (bounds) {
       const googleBounds = new window.google.maps.LatLngBounds(
         { lat: bounds.minLat, lng: bounds.minLng },
@@ -146,9 +146,9 @@ export default function Map() {
       circleRef.current = null
     }
 
-    if (filterCenter && mapRef.current) {
+    if (filterCenter && mapInstance) {
       circleRef.current = new window.google.maps.Circle({
-        map: mapRef.current,
+        map: mapInstance,
         center: { lat: filterCenter.lat, lng: filterCenter.lng },
         radius: filterRadius * 1609.34,
         fillColor: '#C0272D',
@@ -165,11 +165,11 @@ export default function Map() {
         circleRef.current = null
       }
     }
-  }, [filterCenter, filterRadius, isLoaded])
+  }, [mapInstance, filterCenter, filterRadius, isLoaded])
 
   // Rebuild markers when leads, filter, hidden stages, or map readiness changes
   useEffect(() => {
-    if (!mapRef.current || leads.length === 0) return
+    if (!mapInstance || leads.length === 0) return
 
     if (clustererRef.current) {
       clustererRef.current.clearMarkers()
@@ -202,7 +202,7 @@ export default function Map() {
       })
 
     clustererRef.current = new MarkerClusterer({
-      map: mapRef.current,
+      map: mapInstance,
       markers,
     })
 
@@ -212,23 +212,23 @@ export default function Map() {
         clustererRef.current = null
       }
     }
-  }, [leads, isLoaded, filterCenter, filterRadius, hiddenStages])
+  }, [mapInstance, leads, isLoaded, filterCenter, filterRadius, hiddenStages])
 
   // Fit map to filter circle or full lead bounds when filter changes
   useEffect(() => {
-    if (!mapRef.current) return
+    if (!mapInstance) return
     if (filterCenter) {
       const center = new window.google.maps.LatLng(filterCenter.lat, filterCenter.lng)
       const circleBounds = new window.google.maps.Circle({ center, radius: filterRadius * 1609.34 }).getBounds()
-      mapRef.current.fitBounds(circleBounds, 60)
+      mapInstance.fitBounds(circleBounds, 60)
     } else if (bounds) {
       const googleBounds = new window.google.maps.LatLngBounds(
         { lat: bounds.minLat, lng: bounds.minLng },
         { lat: bounds.maxLat, lng: bounds.maxLng }
       )
-      mapRef.current.fitBounds(googleBounds, 60)
+      mapInstance.fitBounds(googleBounds, 60)
     }
-  }, [filterCenter, filterRadius, bounds])
+  }, [mapInstance, filterCenter, filterRadius, bounds])
 
   if (loading) {
     return (
