@@ -12,6 +12,14 @@ import { geocodeLead } from '../lib/geocode'
 const TEMP_MAP   = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
 
+function normalizeEmptyStrings(obj) {
+  const out = {}
+  for (const [key, value] of Object.entries(obj)) {
+    out[key] = (typeof value === 'string' && value.trim() === '') ? null : value
+  }
+  return out
+}
+
 // ─── Type colors (matches spec) ────────────────────────────────────────────
 const TYPE_COLORS = {
   note:      { border: '#6B7280', badge: '#6B7280', bg: 'rgba(107,114,128,0.10)' },
@@ -804,10 +812,10 @@ export default function LeadDetail() {
     setSaving(true)
     // Coerce numeric fields; strip read-only DB columns from the update payload
     const { id: _id, created_at, updated_at, score, user_email, ...editable } = form
-    const payload = {
+    const payload = normalizeEmptyStrings({
       ...editable,
       value: form.value !== '' && form.value != null ? Number(form.value) || null : null,
-    }
+    })
     const addrChanged = (form.address !== lead.address) || (form.city !== lead.city) || (form.zip !== lead.zip)
     const { error } = await supabase.from('leads').update(payload).eq('id', id)
     setSaving(false)

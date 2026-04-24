@@ -4,6 +4,14 @@ import { useToast } from '../lib/toast'
 import { geocodeLead } from '../lib/geocode'
 import { STAGES, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
 
+function normalizeEmptyStrings(obj) {
+  const out = {}
+  for (const [key, value] of Object.entries(obj)) {
+    out[key] = (typeof value === 'string' && value.trim() === '') ? null : value
+  }
+  return out
+}
+
 const EMPTY = {
   first_name: '', last_name: '', email: '', phone: '',
   company: '', address: '', city: '', zip: '',
@@ -101,11 +109,11 @@ export default function AddLeadModal({ open, onClose, onSaved, defaultStage }) {
     }
     setSaving(true)
     const { notes, ...rest } = form
-    const payload = {
+    const payload = normalizeEmptyStrings({
       ...rest,
       value: form.value ? Number(form.value) : null,
       follow_up_date: form.follow_up_date || null,
-    }
+    })
     const { data, error } = await supabase.from('leads').insert([payload]).select().single()
     if (error) {
       setSaving(false)
