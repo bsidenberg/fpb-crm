@@ -2,7 +2,6 @@
 export const USER_NAMES = {
   'brian@floridapolebarn.com': 'Brian Sidenberg',
   'jeff@floridapolebarn.com': 'Jeff Hicks',
-  'paul@floridapolebarn.com': 'Paul Blankinship',
 }
 
 export function getDisplayName(email) {
