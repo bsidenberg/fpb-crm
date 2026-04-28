@@ -16,7 +16,7 @@ const EMPTY = {
   first_name: '', last_name: '', email: '', phone: '',
   company: '', address: '', city: '', zip: '',
   source: '', stage: 'new',
-  value: '', barn_size: '', service_type: '',
+  value: '', barn_size: '', service_type: '', building_type: '',
   follow_up_date: '', priority: 'warm',
   tags: [],
   notes: '',
@@ -218,7 +218,9 @@ export default function AddLeadModal({ open, onClose, onSaved, defaultStage }) {
               <Field label="Service Type">
                 <Sel value={form.service_type} onChange={set('service_type')} options={['Kit Delivery Only', 'Kit + Installation']} placeholder="Select type" />
               </Field>
-              <div />
+              <Field label="Building Type">
+                <Sel value={form.building_type} onChange={set('building_type')} options={['Open Pole Barn', 'Enclosed Pole Barn', 'Not Sure Yet']} placeholder="Select type" />
+              </Field>
             </div>
 
             <div style={g2}>

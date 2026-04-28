@@ -248,6 +248,7 @@ function CompactInfo({ lead, scoreData, onStageChange, tempOpen, setTempOpen, on
       </DenseRow>
       <DenseRow label="Barn Size">{lead.barn_size || dash}</DenseRow>
       <DenseRow label="Service Type">{lead.service_type || dash}</DenseRow>
+      <DenseRow label="Building Type">{lead.building_type || dash}</DenseRow>
       <DenseRow label="Timeline">{lead.timeline || dash}</DenseRow>
       <DenseRow label="Budget Range">{lead.budget_range || dash}</DenseRow>
       <DenseRow label="Land Owned">
@@ -597,6 +598,10 @@ function EditForm({ form, set }) {
       <div style={grid2}>
         <div style={col}><label style={lbl}>Service Type</label>{sel('service_type', ['Kit Delivery Only', 'Kit + Installation'], 'Select type')}</div>
         <div style={col}><label style={lbl}>Timeline</label>{sel('timeline', ['As Soon As Possible', '1-3 Months', '3-6 Months', '6-12 Months', 'Just Looking'], 'Select timeline')}</div>
+      </div>
+      <div style={grid2}>
+        <div style={col}><label style={lbl}>Building Type</label>{sel('building_type', ['Open Pole Barn', 'Enclosed Pole Barn', 'Not Sure Yet'], 'Select type')}</div>
+        <div style={col} />
       </div>
       <div style={grid2}>
         <div style={col}><label style={lbl}>Budget Range</label>{inp('budget_range', 'text', '$15,000 - $25,000')}</div>

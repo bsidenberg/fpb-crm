@@ -59,6 +59,7 @@ export default function Board() {
   const [filterFollowUp, setFilterFollowUp] = useState(() => _p.get('followup') || '')
   const [sortBy,        setSortBy]        = useState(() => _p.get('sort')    || 'score_desc')
   const [serviceType,   setServiceType]   = useState(() => _p.get('svc')     || 'all')
+  const [buildingType,  setBuildingType]  = useState(() => _p.get('bld')     || 'all')
 
   // Keep URL in sync whenever any filter changes
   useEffect(() => {
@@ -69,9 +70,10 @@ export default function Board() {
     if (filterFollowUp)           p.set('followup', filterFollowUp)
     if (sortBy !== 'score_desc')  p.set('sort',     sortBy)
     if (serviceType !== 'all')    p.set('svc',      serviceType)
+    if (buildingType !== 'all')   p.set('bld',      buildingType)
     const qs = p.toString()
     window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
-  }, [search, filterStage, filterTemp, filterFollowUp, sortBy, serviceType])
+  }, [search, filterStage, filterTemp, filterFollowUp, sortBy, serviceType, buildingType])
 
   const fetchLeads = useCallback(async () => {
     // Fetch leads and activity counts in parallel
@@ -182,14 +184,15 @@ export default function Board() {
     }
   }, [applyLeadChange, fetchLeads])
 
-  // Service-type filtered base — used for both KPIs and board leads
-  const serviceFiltered = serviceType === 'all'
-    ? leads
-    : leads.filter(l => {
-        if (serviceType === 'kit')     return l.service_type === 'Kit Delivery Only'
-        if (serviceType === 'turnkey') return l.service_type === 'Kit + Installation'
-        return true
-      })
+  // Service-type + building-type filtered base — used for both KPIs and board leads
+  const serviceFiltered = leads.filter(l => {
+    if (serviceType === 'kit')      { if (l.service_type  !== 'Kit Delivery Only')  return false }
+    if (serviceType === 'turnkey')  { if (l.service_type  !== 'Kit + Installation') return false }
+    if (buildingType === 'open')    { if (l.building_type !== 'Open Pole Barn')     return false }
+    if (buildingType === 'enclosed'){ if (l.building_type !== 'Enclosed Pole Barn') return false }
+    if (buildingType === 'unsure')  { if (l.building_type !== 'Not Sure Yet')       return false }
+    return true
+  })
 
   const filtered = serviceFiltered.filter(l => {
     if (filterStage && l.stage !== filterStage) return false
@@ -334,40 +337,46 @@ export default function Board() {
           </div>
         </div>
 
-        {/* Service type toggle */}
+        {/* Service type + Building type toggles */}
         {(() => {
-          const btns = [
+          const svcBtns = [
             { id: 'all',     label: 'All' },
             { id: 'kit',     label: 'Kit Only' },
             { id: 'turnkey', label: 'Turnkey' },
           ]
+          const bldBtns = [
+            { id: 'all',      label: 'All Buildings' },
+            { id: 'open',     label: 'Open' },
+            { id: 'enclosed', label: 'Enclosed' },
+            { id: 'unsure',   label: 'Unsure' },
+          ]
+          const renderBtn = (b, active, onClick) => (
+            <button
+              key={b.id}
+              onClick={() => onClick(b.id)}
+              style={{
+                padding: '5px 14px',
+                borderRadius: 20,
+                border: active ? 'none' : '1px solid var(--color-border)',
+                background: active
+                  ? (b.id === 'kit' ? '#C0272D' : b.id === 'turnkey' ? '#2B3A6B' : '#374151')
+                  : 'var(--color-surface)',
+                color: active ? '#fff' : 'var(--color-text-2)',
+                fontSize: 12,
+                fontWeight: active ? 700 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                letterSpacing: active ? '0.1px' : 0,
+              }}
+            >
+              {b.label}
+            </button>
+          )
           return (
-            <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
-              {btns.map(b => {
-                const active = serviceType === b.id
-                return (
-                  <button
-                    key={b.id}
-                    onClick={() => setServiceType(b.id)}
-                    style={{
-                      padding: '5px 14px',
-                      borderRadius: 20,
-                      border: active ? 'none' : '1px solid var(--color-border)',
-                      background: active
-                        ? (b.id === 'kit' ? '#C0272D' : b.id === 'turnkey' ? '#2B3A6B' : '#374151')
-                        : 'var(--color-surface)',
-                      color: active ? '#fff' : 'var(--color-text-2)',
-                      fontSize: 12,
-                      fontWeight: active ? 700 : 500,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      letterSpacing: active ? '0.1px' : 0,
-                    }}
-                  >
-                    {b.label}
-                  </button>
-                )
-              })}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
+              {svcBtns.map(b => renderBtn(b, serviceType === b.id, setServiceType))}
+              <div style={{ width: 1, background: 'var(--color-border)', margin: '2px 6px', alignSelf: 'stretch' }} />
+              {bldBtns.map(b => renderBtn(b, buildingType === b.id, setBuildingType))}
             </div>
           )
         })()}
