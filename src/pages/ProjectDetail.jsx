@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
+import { usePresence } from '../hooks/usePresence'
+import PresenceBanner from '../components/PresenceBanner'
 import HitListTab    from '../components/HitListTab'
 import UpdatesTab    from '../components/UpdatesTab'
 import ChecklistTab  from '../components/ChecklistTab'
@@ -78,6 +81,12 @@ function Metric({ label, value, color }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ProjectDetail() {
   const { id } = useParams()
+  const { email: userEmail, displayName } = useAuth()
+  const { otherViewers } = usePresence({
+    channelKey: id ? `project:${id}` : null,
+    userEmail,
+    userDisplayName: displayName,
+  })
 
   const [project,        setProject]        = useState(null)
   const [hitList,        setHitList]        = useState([])
@@ -175,6 +184,8 @@ export default function ProjectDetail() {
 
       {/* Scrollable body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+
+        <PresenceBanner viewers={otherViewers} />
 
         {/* Header card */}
         <div style={{

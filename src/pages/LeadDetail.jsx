@@ -8,6 +8,8 @@ import { STAGES, STAGE_MAP, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVIT
 import { calculateScore, getScoreGrade } from '../utils/scoreLeads'
 import NewProjectModal from '../components/NewProjectModal'
 import { geocodeLead } from '../lib/geocode'
+import { usePresence } from '../hooks/usePresence'
+import PresenceBanner from '../components/PresenceBanner'
 
 const TEMP_MAP   = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
@@ -726,6 +728,11 @@ export default function LeadDetail() {
   const navigate = useNavigate()
   const toast = useToast()
   const { displayName, email: userEmail } = useAuth()
+  const { otherViewers } = usePresence({
+    channelKey: id ? `lead:${id}` : null,
+    userEmail,
+    userDisplayName: displayName,
+  })
 
   const [lead,            setLead]            = useState(null)
   const [loading,         setLoading]         = useState(true)
@@ -1071,6 +1078,7 @@ export default function LeadDetail() {
           display: 'flex',
           flexDirection: 'column',
         }}>
+          <PresenceBanner viewers={otherViewers} />
           {editing ? (
             <>
               <EditForm form={form} set={set} />
