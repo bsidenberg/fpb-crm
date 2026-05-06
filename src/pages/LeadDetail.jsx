@@ -960,7 +960,10 @@ export default function LeadDetail() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              if (window.history.length > 1) navigate(-1)
+              else navigate('/')
+            }}
             style={{ background: 'none', border: 'none', color: 'var(--color-text-3)', cursor: 'pointer', fontSize: 20, padding: '0 4px', lineHeight: 1 }}
           >
             ←
