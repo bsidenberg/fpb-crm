@@ -46,13 +46,25 @@ export default function Board() {
   const [modalStage, setModalStage] = useState('new')
   const [importOpen, setImportOpen] = useState(false)
 
-  // Distance filter state
-  const [filterCenter,   setFilterCenter]   = useState(null)  // { lat, lng, address } | null
-  const [filterRadius,   setFilterRadius]   = useState(50)
-  const [filterApplying, setFilterApplying] = useState(false)
-
   // Filter state — initialised from URL search params so filters survive refresh/share
   const _p = new URLSearchParams(window.location.search)
+
+  // Distance filter state — restored from URL if dist_addr/lat/lng all present
+  const [filterCenter, setFilterCenter] = useState(() => {
+    const addr = _p.get('dist_addr')
+    const lat  = parseFloat(_p.get('dist_lat'))
+    const lng  = parseFloat(_p.get('dist_lng'))
+    if (addr && Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng, address: addr }
+    }
+    return null
+  })
+  const [filterRadius, setFilterRadius] = useState(() => {
+    const r = parseInt(_p.get('dist_r'), 10)
+    return Number.isFinite(r) ? r : 50
+  })
+  const [filterApplying, setFilterApplying] = useState(false)
+
   const [search,        setSearch]        = useState(() => _p.get('q')       || '')
   const [filterStage,   setFilterStage]   = useState(() => _p.get('stage')   || '')
   const [filterTemp,    setFilterTemp]    = useState(() => _p.get('temp')    || '')
@@ -71,9 +83,15 @@ export default function Board() {
     if (sortBy !== 'score_desc')  p.set('sort',     sortBy)
     if (serviceType !== 'all')    p.set('svc',      serviceType)
     if (buildingType !== 'all')   p.set('bld',      buildingType)
+    if (filterCenter) {
+      p.set('dist_addr', filterCenter.address)
+      p.set('dist_lat',  String(filterCenter.lat))
+      p.set('dist_lng',  String(filterCenter.lng))
+      if (filterRadius !== 50) p.set('dist_r', String(filterRadius))
+    }
     const qs = p.toString()
     window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
-  }, [search, filterStage, filterTemp, filterFollowUp, sortBy, serviceType, buildingType])
+  }, [search, filterStage, filterTemp, filterFollowUp, sortBy, serviceType, buildingType, filterCenter, filterRadius])
 
   const fetchLeads = useCallback(async () => {
     // Fetch leads and activity counts in parallel

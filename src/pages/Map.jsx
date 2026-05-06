@@ -47,13 +47,43 @@ export default function Map() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedLead, setSelectedLead] = useState(null)
-  const [filterCenter, setFilterCenter] = useState(null)
-  const [filterRadius, setFilterRadius] = useState(50)
+  // Distance filter state — restored from URL if dist_addr/lat/lng all present
+  const _p = new URLSearchParams(window.location.search)
+  const [filterCenter, setFilterCenter] = useState(() => {
+    const addr = _p.get('dist_addr')
+    const lat  = parseFloat(_p.get('dist_lat'))
+    const lng  = parseFloat(_p.get('dist_lng'))
+    if (addr && Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng, address: addr }
+    }
+    return null
+  })
+  const [filterRadius, setFilterRadius] = useState(() => {
+    const r = parseInt(_p.get('dist_r'), 10)
+    return Number.isFinite(r) ? r : 50
+  })
   const [hiddenStages, setHiddenStages] = useState(new Set())
 
   const [mapInstance, setMapInstance] = useState(null)
   const clustererRef = useRef(null)
   const circleRef = useRef(null)
+
+  // Keep distance filter in sync with URL params (merges with any other params)
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    p.delete('dist_addr')
+    p.delete('dist_lat')
+    p.delete('dist_lng')
+    p.delete('dist_r')
+    if (filterCenter) {
+      p.set('dist_addr', filterCenter.address)
+      p.set('dist_lat',  String(filterCenter.lat))
+      p.set('dist_lng',  String(filterCenter.lng))
+      if (filterRadius !== 50) p.set('dist_r', String(filterRadius))
+    }
+    const qs = p.toString()
+    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+  }, [filterCenter, filterRadius])
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
