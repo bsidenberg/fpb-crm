@@ -1,11 +1,12 @@
 export const STAGES = [
-  { id: 'new',        label: 'New Lead',    color: '#C0272D', bg: '#FEF2F2'  },
-  { id: 'contacted',   label: 'Contacted',   color: '#D97706', bg: '#FEF3C7'  },
-  { id: 'need_price',  label: 'Need Price',  color: '#0891B2', bg: '#ECFEFF'  },
-  { id: 'quote_sent',  label: 'Quote Sent',  color: '#7C3AED', bg: '#F5F3FF'  },
-  { id: 'follow_up',  label: 'Follow-Up',   color: '#D97706', bg: '#FEF3C7'  },
-  { id: 'won',        label: 'Closed Won',  color: '#16A34A', bg: '#DCFCE7'  },
-  { id: 'lost',       label: 'Closed Lost', color: '#6B7280', bg: '#F3F4F6'  },
+  { id: 'new',                  label: 'New Lead',                         color: '#C0272D', bg: '#FEF2F2' },
+  { id: 'contacted_no_comm',    label: 'Contacted - No Communication Yet', color: '#D97706', bg: '#FEF3C7' },
+  { id: 'contacted_waiting',    label: 'Contacted - Waiting on Them',      color: '#F59E0B', bg: '#FFFBEB' },
+  { id: 'need_to_quote',        label: 'Need to Quote',                    color: '#0891B2', bg: '#ECFEFF' },
+  { id: 'estimate_sent',        label: 'Estimate Sent',                    color: '#7C3AED', bg: '#F5F3FF' },
+  { id: 'revision_negotiation', label: 'Revision / Negotiation',           color: '#EA580C', bg: '#FFF7ED' },
+  { id: 'won',                  label: 'Closed Won',                       color: '#16A34A', bg: '#DCFCE7' },
+  { id: 'lost',                 label: 'Closed Lost',                      color: '#6B7280', bg: '#F3F4F6' },
 ]
 
 export const STAGE_MAP = Object.fromEntries(STAGES.map(s => [s.id, s]))

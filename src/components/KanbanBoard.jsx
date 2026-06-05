@@ -92,7 +92,7 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
     // Optimistic update — move card to target column and re-sort
     const now     = new Date().toISOString()
     const updates = { stage: targetStage, stage_changed_at: now }
-    if (targetStage === 'quote_sent') updates.quote_sent_at = now
+    if (targetStage === 'estimate_sent') updates.quote_sent_at = now
 
     const updatedLead = { ...movedLead, ...updates }
     const newItems = {

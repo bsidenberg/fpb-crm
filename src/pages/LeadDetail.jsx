@@ -263,6 +263,13 @@ function CompactInfo({ lead, scoreData, onStageChange, tempOpen, setTempOpen, on
       <DenseRow label="Follow-Up">
         {lead.follow_up_date ? format(parseISO(lead.follow_up_date), 'MMM d, yyyy') : dash}
       </DenseRow>
+      <DenseRow label="Owner">{lead.owner || dash}</DenseRow>
+      <DenseRow label="Last Contact">
+        {lead.last_contact_date ? format(parseISO(lead.last_contact_date), 'MMM d, yyyy') : dash}
+      </DenseRow>
+      <DenseRow label="Probability">
+        {lead.probability != null ? `${lead.probability}%` : dash}
+      </DenseRow>
       <DenseRow label="Created">
         {lead.created_at ? format(parseISO(lead.created_at), 'MMM d, yyyy') : dash}
       </DenseRow>
@@ -652,6 +659,14 @@ function EditForm({ form, set }) {
         <div style={col} />
       </div>
       <div style={grid2}>
+        <div style={col}><label style={lbl}>Owner</label>{inp('owner', 'text', 'e.g. Brian')}</div>
+        <div style={col}><label style={lbl}>Last Contact Date</label>{inp('last_contact_date', 'date')}</div>
+      </div>
+      <div style={grid2}>
+        <div style={col}><label style={lbl}>Probability (%)</label>{inp('probability', 'number', '0–100')}</div>
+        <div style={col} />
+      </div>
+      <div style={grid2}>
         <div style={col}><label style={lbl}>Follow-Up Date</label>{inp('follow_up_date', 'date')}</div>
         <div style={col}>
           <label style={lbl}>Priority</label>
@@ -826,7 +841,8 @@ export default function LeadDetail() {
     const { id: _id, created_at, updated_at, score, user_email, ...editable } = form
     const payload = normalizeEmptyStrings({
       ...editable,
-      value: form.value !== '' && form.value != null ? Number(form.value) || null : null,
+      value:       form.value       !== '' && form.value       != null ? Number(form.value)       || null : null,
+      probability: form.probability !== '' && form.probability != null ? Number(form.probability) || null : null,
     })
     const addrChanged = (form.address !== lead.address) || (form.city !== lead.city) || (form.zip !== lead.zip)
     const { error } = await supabase.from('leads').update(payload).eq('id', id)
