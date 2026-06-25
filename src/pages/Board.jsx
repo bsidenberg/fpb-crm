@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { STAGES, TEMPERATURE } from '../lib/stages'
 import { getFollowUpStatus } from '../lib/followup'
-import { calculateScore } from '../utils/scoreLeads'
 import { geocodeAddress } from '../lib/geocode'
+import { useLeads } from '../context/LeadsProvider'
 import { filterLeadsByRadius } from '../lib/haversine'
 import KanbanBoard from '../components/KanbanBoard'
 import AddLeadModal from '../components/AddLeadModal'
@@ -40,8 +39,11 @@ function StatCard({ label, value, sub, color }) {
 }
 
 export default function Board() {
-  const [leads, setLeads] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { leads, loading, refreshing, fetchLeads, handleDragStateChange } = useLeads()
+  // Show the full-screen spinner only on the very first load (no cached data yet).
+  // On return navigation leads are already populated — render them immediately.
+  const firstLoad = leads.length === 0 && loading
+
   const [modalOpen, setModalOpen] = useState(false)
   const [modalStage, setModalStage] = useState('new')
   const [importOpen, setImportOpen] = useState(false)
@@ -92,115 +94,6 @@ export default function Board() {
     const qs = p.toString()
     window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
   }, [search, filterStage, filterTemp, filterFollowUp, sortBy, serviceType, buildingType, filterCenter, filterRadius])
-
-  const fetchLeads = useCallback(async () => {
-    // Fetch leads and activity counts in parallel
-    const [leadsResult, actResult] = await Promise.all([
-      supabase.from('leads').select('*').order('created_at', { ascending: false }),
-      supabase.from('activities').select('lead_id'),
-    ])
-
-    if (leadsResult.error || !leadsResult.data) { setLoading(false); return }
-
-    // Count activities per lead
-    const actCounts = {}
-    for (const a of (actResult.data || [])) {
-      actCounts[a.lead_id] = (actCounts[a.lead_id] || 0) + 1
-    }
-
-    // Calculate fresh scores and collect leads where score changed
-    const updates = []
-    const leadsWithScores = leadsResult.data.map(lead => {
-      const { score } = calculateScore(lead, actCounts[lead.id] || 0)
-      if (score !== (lead.score ?? 0)) updates.push({ id: lead.id, score })
-      return { ...lead, score }
-    })
-
-    setLeads(leadsWithScores)
-    setLoading(false)
-
-    // Fire-and-forget: save changed scores back to Supabase
-    if (updates.length > 0) {
-      Promise.all(
-        updates.map(({ id, score }) =>
-          supabase.from('leads').update({ score }).eq('id', id)
-        )
-      ).catch(() => {})
-    }
-  }, [])
-
-  useEffect(() => { fetchLeads() }, [fetchLeads])
-
-  // ── Realtime sync ─────────────────────────────────────────────────
-  // isDraggingRef: set true while a card drag is in progress so we don't
-  // reset KanbanBoard state mid-drag. Any realtime changes during a drag
-  // are queued and applied when the drag ends.
-  const isDraggingRef     = useRef(false)
-  const pendingUpdatesRef = useRef([])
-  const pollingRef        = useRef(null)
-
-  const applyLeadChange = useCallback((payload) => {
-    if (payload.eventType === 'INSERT') {
-      const { score } = calculateScore(payload.new, 0)
-      setLeads(prev => {
-        if (prev.some(l => l.id === payload.new.id)) return prev // dedup
-        return [...prev, { ...payload.new, score }]
-      })
-    }
-    if (payload.eventType === 'UPDATE') {
-      setLeads(prev => prev.map(l =>
-        l.id === payload.new.id ? { ...payload.new, score: payload.new.score ?? l.score } : l
-      ))
-    }
-    if (payload.eventType === 'DELETE') {
-      setLeads(prev => prev.filter(l => l.id !== payload.old.id))
-    }
-  }, [])
-
-  const flushPending = useCallback(() => {
-    for (const payload of pendingUpdatesRef.current) applyLeadChange(payload)
-    pendingUpdatesRef.current = []
-  }, [applyLeadChange])
-
-  const handleDragStateChange = useCallback((dragging) => {
-    isDraggingRef.current = dragging
-    if (!dragging) flushPending()
-  }, [flushPending])
-
-  useEffect(() => {
-    let debounceTimer = null
-
-    // NOTE: Enable replication for the `leads` table in the Supabase Dashboard:
-    // Database → Replication → supabase_realtime → toggle ON for "leads"
-    const channel = supabase
-      .channel('board-leads-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
-        clearTimeout(debounceTimer)
-        debounceTimer = setTimeout(() => {
-          if (isDraggingRef.current) {
-            // Queue updates that arrive during a drag — flush when drag ends
-            pendingUpdatesRef.current.push(payload)
-          } else {
-            applyLeadChange(payload)
-          }
-        }, 100)
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          // Realtime healthy — stop polling fallback if running
-          if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
-        } else if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && !pollingRef.current) {
-          // Realtime unavailable — fall back to polling every 30s
-          pollingRef.current = setInterval(() => fetchLeads(), 30_000)
-        }
-      })
-
-    return () => {
-      clearTimeout(debounceTimer)
-      if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
-      supabase.removeChannel(channel)
-    }
-  }, [applyLeadChange, fetchLeads])
 
   // Full filter → sort → distance-annotate pipeline.
   // serviceFiltered is exposed alongside annotatedLeads so KPIs share the same memo.
@@ -294,8 +187,20 @@ export default function Board() {
             <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.4px' }}>
               Sales Pipeline
             </h1>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              {loading ? 'Loading...' : `${serviceFiltered.length} lead${serviceFiltered.length !== 1 ? 's' : ''}${serviceType !== 'all' ? ' · filtered' : ''}`}
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+              {firstLoad
+                ? 'Loading...'
+                : `${serviceFiltered.length} lead${serviceFiltered.length !== 1 ? 's' : ''}${serviceType !== 'all' ? ' · filtered' : ''}`
+              }
+              {refreshing && !firstLoad && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--color-text-3)' }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
+                    style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                    <path d="M21 12a9 9 0 00-9-9" />
+                  </svg>
+                  Syncing
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -530,7 +435,7 @@ export default function Board() {
       </div>
 
       {/* Board */}
-      {loading ? (
+      {firstLoad ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
           Loading pipeline...
         </div>

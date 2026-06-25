@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ToastProvider } from './lib/toast'
 import { supabase } from './lib/supabase'
 import Layout from './components/Layout'
+import { LeadsProvider } from './context/LeadsProvider'
 import Board from './pages/Board'
 import LeadDetail from './pages/LeadDetail'
 import FollowUps from './pages/FollowUps'
@@ -61,7 +62,7 @@ export default function App() {
     <ToastProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/" element={<LeadsProvider><Layout /></LeadsProvider>}>
             <Route index element={<Board />} />
             <Route path="leads/:id" element={<LeadDetail />} />
             <Route path="followups" element={<FollowUps />} />
