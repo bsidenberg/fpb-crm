@@ -136,8 +136,7 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
 
     const stageName = STAGES.find(s => s.id === targetStage)?.label
     toast(`Moved to ${stageName}`, 'success')
-    onLeadsChange?.()
-  }, [leads, onLeadsChange, toast, onDragStateChange])
+  }, [leads, toast, onDragStateChange])
 
   const activeCard = activeId
     ? Object.values(items).flat().find(l => l.id === activeId)
