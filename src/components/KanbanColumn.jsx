@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import LeadCard from './LeadCard'
 
@@ -6,7 +7,7 @@ function formatValue(v) {
   return '$' + Number(v).toLocaleString()
 }
 
-export default function KanbanColumn({ stage, leads, onAddLead, filterRadius }) {
+function KanbanColumn({ stage, leads, onAddLead, filterRadius }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
 
   const totalValue = leads.reduce((sum, l) => sum + (Number(l.value) || 0), 0)
@@ -134,3 +135,5 @@ export default function KanbanColumn({ stage, leads, onAddLead, filterRadius }) 
     </div>
   )
 }
+
+export default memo(KanbanColumn)

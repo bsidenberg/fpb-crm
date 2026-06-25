@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNow, format, parseISO } from 'date-fns'
@@ -101,7 +101,7 @@ function ProbabilityBadge({ value }) {
   )
 }
 
-export default function LeadCard({ lead, overlay = false }) {
+function LeadCard({ lead, overlay = false }) {
   const navigate = useNavigate()
   const toast = useToast()
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id })
@@ -349,3 +349,33 @@ export default function LeadCard({ lead, overlay = false }) {
     </div>
   )
 }
+
+// Custom comparator: lead objects are re-spread on every pipeline run (sorted.map creates new
+// references), so default shallow compare would always fail. Check each rendered field by value.
+function areLeadCardPropsEqual(prev, next) {
+  if (prev.overlay !== next.overlay) return false
+  const a = prev.lead
+  const b = next.lead
+  return (
+    a.id                === b.id                &&
+    a.first_name        === b.first_name        &&
+    a.last_name         === b.last_name         &&
+    a.stage             === b.stage             &&
+    a.priority          === b.priority          &&
+    a.score             === b.score             &&
+    a.value             === b.value             &&
+    a.probability       === b.probability       &&
+    a.owner             === b.owner             &&
+    a.company           === b.company           &&
+    a.city              === b.city              &&
+    a.barn_size         === b.barn_size         &&
+    a.source            === b.source            &&
+    a.follow_up_date    === b.follow_up_date    &&
+    a.last_contact_date === b.last_contact_date &&
+    a._distance         === b._distance         &&
+    a._inRadius         === b._inRadius         &&
+    (a.tags === b.tags || (a.tags || []).join('\0') === (b.tags || []).join('\0'))
+  )
+}
+
+export default memo(LeadCard, areLeadCardPropsEqual)
