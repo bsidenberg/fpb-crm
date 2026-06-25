@@ -48,9 +48,21 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
   // before handleDragOver mutates itemsRef.
   const originalContainerRef = useRef(null)
 
-  // Sync when leads prop changes (filter change or refetch)
+  // Sync when leads prop changes (filter change or refetch).
+  // For each stage, reuse the previous array reference when its lead objects are identical
+  // (same length, same references in the same order) so KanbanColumn.memo bails on
+  // unchanged columns. buildItems preserves lead object refs (filter+sort, no spreading),
+  // so element-identity comparison is valid.
   useEffect(() => {
     const next = buildItems(leads)
+    const prev = itemsRef.current
+    for (const stageId of Object.keys(next)) {
+      const pa = prev[stageId]
+      const na = next[stageId]
+      if (pa && pa.length === na.length && na.every((l, i) => l === pa[i])) {
+        next[stageId] = pa
+      }
+    }
     itemsRef.current = next
     setItems(next)
   }, [leads])

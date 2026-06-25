@@ -255,10 +255,10 @@ export default function Board() {
     upcoming: activeLeadsForFollowUp.filter(l => getFollowUpStatus(l.follow_up_date) === 'upcoming').length,
   }
 
-  const handleAddLead = (stageId) => {
+  const handleAddLead = useCallback((stageId) => {
     setModalStage(stageId)
     setModalOpen(true)
-  }
+  }, [])
 
   // Stats — derived from serviceFiltered so KPIs reflect the active toggle
   const activeLeads  = serviceFiltered.filter(l => l.stage !== 'won' && l.stage !== 'lost')
