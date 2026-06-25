@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { STAGES, TEMPERATURE } from '../lib/stages'
 import { getFollowUpStatus } from '../lib/followup'
@@ -202,42 +202,47 @@ export default function Board() {
     }
   }, [applyLeadChange, fetchLeads])
 
-  // Service-type + building-type filtered base — used for both KPIs and board leads
-  const serviceFiltered = leads.filter(l => {
-    if (serviceType === 'kit')      { if (l.service_type  !== 'Kit Delivery Only')  return false }
-    if (serviceType === 'turnkey')  { if (l.service_type  !== 'Kit + Installation') return false }
-    if (buildingType === 'open')    { if (l.building_type !== 'Open Pole Barn')     return false }
-    if (buildingType === 'enclosed'){ if (l.building_type !== 'Enclosed Pole Barn') return false }
-    if (buildingType === 'unsure')  { if (l.building_type !== 'Not Sure Yet')       return false }
-    return true
-  })
+  // Full filter → sort → distance-annotate pipeline.
+  // serviceFiltered is exposed alongside annotatedLeads so KPIs share the same memo.
+  // Recomputes only when one of these 10 inputs changes — not on modalOpen, importOpen, etc.
+  const { annotatedLeads, serviceFiltered } = useMemo(() => {
+    const serviceFiltered = leads.filter(l => {
+      if (serviceType === 'kit')      { if (l.service_type  !== 'Kit Delivery Only')  return false }
+      if (serviceType === 'turnkey')  { if (l.service_type  !== 'Kit + Installation') return false }
+      if (buildingType === 'open')    { if (l.building_type !== 'Open Pole Barn')     return false }
+      if (buildingType === 'enclosed'){ if (l.building_type !== 'Enclosed Pole Barn') return false }
+      if (buildingType === 'unsure')  { if (l.building_type !== 'Not Sure Yet')       return false }
+      return true
+    })
 
-  const filtered = serviceFiltered.filter(l => {
-    if (filterStage && l.stage !== filterStage) return false
-    if (filterTemp && l.priority !== filterTemp) return false
-    if (filterFollowUp) {
-      if (getFollowUpStatus(l.follow_up_date) !== filterFollowUp) return false
-    }
-    if (search) {
-      const q = search.toLowerCase()
-      const match = [l.first_name, l.last_name, l.email, l.phone, l.company, l.city]
-        .filter(Boolean).some(v => v.toLowerCase().includes(q))
-      if (!match) return false
-    }
-    return true
-  })
+    const filtered = serviceFiltered.filter(l => {
+      if (filterStage && l.stage !== filterStage) return false
+      if (filterTemp && l.priority !== filterTemp) return false
+      if (filterFollowUp) {
+        if (getFollowUpStatus(l.follow_up_date) !== filterFollowUp) return false
+      }
+      if (search) {
+        const q = search.toLowerCase()
+        const match = [l.first_name, l.last_name, l.email, l.phone, l.company, l.city]
+          .filter(Boolean).some(v => v.toLowerCase().includes(q))
+        if (!match) return false
+      }
+      return true
+    })
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === 'score_desc') return (b.score || 0) - (a.score || 0)
-    if (sortBy === 'score_asc')  return (a.score || 0) - (b.score || 0)
-    if (sortBy === 'value_desc') return (Number(b.value) || 0) - (Number(a.value) || 0)
-    return 0 // 'newest' — preserve DB order
-  })
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === 'score_desc') return (b.score || 0) - (a.score || 0)
+      if (sortBy === 'score_asc')  return (a.score || 0) - (b.score || 0)
+      if (sortBy === 'value_desc') return (Number(b.value) || 0) - (Number(a.value) || 0)
+      return 0 // 'newest' — preserve DB order
+    })
 
-  // Distance annotation — adds _distance and _inRadius to each lead
-  const annotatedLeads = filterCenter
-    ? filterLeadsByRadius(sorted, filterCenter.lat, filterCenter.lng, filterRadius)
-    : sorted.map(l => ({ ...l, _distance: null, _inRadius: null }))
+    const annotatedLeads = filterCenter
+      ? filterLeadsByRadius(sorted, filterCenter.lat, filterCenter.lng, filterRadius)
+      : sorted.map(l => ({ ...l, _distance: null, _inRadius: null }))
+
+    return { annotatedLeads, serviceFiltered }
+  }, [leads, serviceType, buildingType, filterStage, filterTemp, filterFollowUp, search, sortBy, filterCenter, filterRadius])
 
   const matchCount = filterCenter
     ? annotatedLeads.filter(l => l._distance != null && l._distance <= filterRadius).length
