@@ -177,6 +177,7 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
             leads={items[stage.id] || []}
             onAddLead={onAddLead}
             filterRadius={filterRadius}
+            activeId={activeId}
           />
         ))}
       </div>

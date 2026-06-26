@@ -1,5 +1,6 @@
-import { memo } from 'react'
+import { memo, useRef } from 'react'
 import { useDroppable } from '@dnd-kit/core'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import LeadCard from './LeadCard'
 
 function formatValue(v) {
@@ -7,8 +8,17 @@ function formatValue(v) {
   return '$' + Number(v).toLocaleString()
 }
 
-function KanbanColumn({ stage, leads, onAddLead, filterRadius }) {
+function KanbanColumn({ stage, leads, onAddLead, filterRadius, activeId }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
+  const scrollRef = useRef(null)
+
+  const virtualizer = useVirtualizer({
+    count: leads.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 160,
+    overscan: 5,
+    measureElement: el => el?.getBoundingClientRect().height ?? 160,
+  })
 
   const totalValue = leads.reduce((sum, l) => sum + (Number(l.value) || 0), 0)
 
@@ -70,9 +80,10 @@ function KanbanColumn({ stage, leads, onAddLead, filterRadius }) {
         )}
       </div>
 
-      {/* Cards area */}
+      {/* Cards area — scroll container for the virtualizer. Both useDroppable's setNodeRef
+          and the virtualizer's getScrollElement must point at this same DOM node. */}
       <div
-        ref={setNodeRef}
+        ref={el => { setNodeRef(el); scrollRef.current = el }}
         style={{
           flex: 1,
           padding: '8px 8px 4px',
@@ -80,10 +91,7 @@ function KanbanColumn({ stage, leads, onAddLead, filterRadius }) {
           overflowY: 'auto',
         }}
       >
-        {leads.map(lead => (
-          <LeadCard key={lead.id} lead={lead} />
-        ))}
-        {leads.length === 0 && (
+        {leads.length === 0 ? (
           <div style={{
             textAlign: 'center',
             padding: '20px 8px',
@@ -94,6 +102,28 @@ function KanbanColumn({ stage, leads, onAddLead, filterRadius }) {
             transition: 'border-color 0.15s',
           }}>
             Drop here
+          </div>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map(virtualItem => (
+              <div
+                key={virtualItem.key}
+                data-index={virtualItem.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                <LeadCard
+                  lead={leads[virtualItem.index]}
+                  activeId={activeId}
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>

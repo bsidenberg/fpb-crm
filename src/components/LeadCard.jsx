@@ -101,10 +101,14 @@ function ProbabilityBadge({ value }) {
   )
 }
 
-function LeadCard({ lead, overlay = false }) {
+function LeadCard({ lead, overlay = false, activeId = null }) {
   const navigate = useNavigate()
   const toast = useToast()
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id })
+  const { attributes, listeners, setNodeRef } = useDraggable({ id: lead.id })
+  // Derive dragging state from the prop so freshly-mounted virtual instances
+  // (scrolled back into view mid-drag) render correctly without useDraggable's
+  // stale per-instance state.
+  const isDragging = activeId === lead.id
 
   const [localPriority, setLocalPriority] = useState(lead.priority || 'warm')
   const [tempOpen, setTempOpen] = useState(false)
@@ -352,8 +356,11 @@ function LeadCard({ lead, overlay = false }) {
 
 // Custom comparator: lead objects are re-spread on every pipeline run (sorted.map creates new
 // references), so default shallow compare would always fail. Check each rendered field by value.
+// Also gate on dragging-state transitions: if (activeId === lead.id) changed, re-render so the
+// opacity flips correctly even on freshly-mounted virtual instances.
 function areLeadCardPropsEqual(prev, next) {
   if (prev.overlay !== next.overlay) return false
+  if ((prev.activeId === prev.lead.id) !== (next.activeId === next.lead.id)) return false
   const a = prev.lead
   const b = next.lead
   return (
