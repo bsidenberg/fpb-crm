@@ -897,10 +897,10 @@ export default function LeadDetail() {
     setLead(l => ({ ...l, stage: newStage, stage_changed_at: now }))
     const updates = { stage: newStage, stage_changed_at: now }
     if (newStage === 'quote_sent') updates.quote_sent_at = now
-    const { error } = await supabase.from('leads').update(updates).eq('id', id)
-    if (error) {
+    const { data, error } = await supabase.from('leads').update(updates).eq('id', id).select()
+    if (error || !data || data.length === 0) {
       setLead(l => ({ ...l, stage: prevStage }))
-      toast('Stage update failed', 'error')
+      toast('Stage update failed — not saved', 'error')
     } else {
       toast(`Stage → ${STAGE_MAP[newStage]?.label}`)
     }

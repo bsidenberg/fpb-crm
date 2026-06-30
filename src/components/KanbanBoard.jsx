@@ -120,14 +120,16 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
     console.log('[Drag] updating stage to:', targetStage)
 
     // Step 1: update stage only — always safe regardless of schema state
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('leads')
       .update({ stage: targetStage })
       .eq('id', leadId)
+      .select()
 
-    if (error) {
-      console.error('[Drag] stage save FAILED:', JSON.stringify(error, null, 2))
-      toast(`Failed to move lead: ${error.message}`, 'error')
+    if (error || !data || data.length === 0) {
+      const msg = error ? error.message : 'permission denied'
+      console.error('[Drag] stage save FAILED:', msg)
+      toast(`Move not saved — ${msg}`, 'error')
       const reverted = buildItems(leads)
       itemsRef.current = reverted
       setItems(reverted)
