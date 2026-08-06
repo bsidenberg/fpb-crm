@@ -1,16 +1,42 @@
-# React + Vite
+# FPB CRM
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Internal lead-pipeline CRM for Florida Pole Barn: Kanban board with realtime
+sync and drag-and-drop stages, lead scoring, follow-up tracking, a radius-
+filtered map, project management for won jobs, and analytics.
 
-Currently, two official plugins are available:
+**Stack:** React 19 · Vite · Supabase (Postgres, Realtime, Edge Functions) ·
+Google Maps · Vercel
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Development
 
-## React Compiler
+```sh
+npm install
+npm run dev      # local dev server
+npm run lint     # eslint
+npm test         # vitest unit tests
+npm run build    # production build
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Required env (`.env`, not committed):
 
-## Expanding the ESLint configuration
+```
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+VITE_GOOGLE_MAPS_API_KEY=   # browser Maps JS key (Map page only)
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Server-side secrets (`GOOGLE_MAPS_SERVER_KEY`, `RESEND_API_KEY`, service-role
+keys) live in Supabase edge-function config, never in VITE_ vars.
+
+## Repo map
+
+- `src/pages/` — Board (Kanban), LeadDetail, FollowUps, Projects, Map, Analytics
+- `src/context/LeadsProvider.jsx` — shared leads cache + realtime subscription
+- `src/lib/`, `src/utils/` — pure logic (stages, dates, distance, scoring),
+  unit-tested with colocated `*.test.js`
+- `supabase/migrations/` — schema source of truth
+- `supabase/functions/` — Deno edge functions (geocoding, email digests)
+- `CLAUDE.md` — working conventions, invariants, and known debt
+
+CI runs lint, tests, and build on every push and PR
+(`.github/workflows/ci.yml`).
