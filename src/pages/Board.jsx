@@ -65,7 +65,7 @@ export default function Board() {
     const r = parseInt(_p.get('dist_r'), 10)
     return Number.isFinite(r) ? r : 50
   })
-  const [filterApplying, setFilterApplying] = useState(false)
+  const [, setFilterApplying] = useState(false)
 
   const [search,        setSearch]        = useState(() => _p.get('q')       || '')
   const [filterStage,   setFilterStage]   = useState(() => _p.get('stage')   || '')

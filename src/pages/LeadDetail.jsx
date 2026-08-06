@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { supabase } from '../lib/supabase'
@@ -90,7 +90,6 @@ function TempPopover({ current, onSelect, onClose }) {
 
 // ─── ActivityIcon ────────────────────────────────────────────────────────────
 function ActivityIcon({ type, size = 13 }) {
-  const aType = ACTIVITY_TYPES.find(t => t.id === type) || ACTIVITY_TYPES[0]
   const s = { width: size, height: size, style: { flexShrink: 0 } }
   const c = TYPE_COLORS[type] || TYPE_COLORS.note
   const stroke = c.badge
@@ -768,11 +767,6 @@ export default function LeadDetail() {
     if (displayName) setNoteAuthor(displayName)
   }, [displayName])
 
-  useEffect(() => {
-    fetchLead()
-    fetchActivities()
-  }, [id])
-
   // Realtime: lead
   useEffect(() => {
     const channel = supabase
@@ -833,12 +827,22 @@ export default function LeadDetail() {
     setActivities(data || [])
   }
 
+  useEffect(() => {
+    fetchLead()
+    fetchActivities()
+  }, [id])
+
   const set = (key) => (val) => setForm(prev => ({ ...prev, [key]: val }))
 
   const handleSave = async () => {
     setSaving(true)
     // Coerce numeric fields; strip read-only DB columns from the update payload
-    const { id: _id, created_at, updated_at, score, user_email, ...editable } = form
+    const editable = { ...form }
+    delete editable.id
+    delete editable.created_at
+    delete editable.updated_at
+    delete editable.score
+    delete editable.user_email
     const payload = normalizeEmptyStrings({
       ...editable,
       value:       form.value       !== '' && form.value       != null ? Number(form.value)       || null : null,
@@ -882,7 +886,7 @@ export default function LeadDetail() {
     }
   }
 
-  const handleTempSelect = useCallback(async (newPriority) => {
+  const handleTempSelect = async (newPriority) => {
     setTempOpen(false)
     const prev = lead.priority
     setLead(l => ({ ...l, priority: newPriority }))
@@ -893,7 +897,7 @@ export default function LeadDetail() {
     } else {
       toast('Temperature updated')
     }
-  }, [lead?.priority, id, toast])
+  }
 
   const handleAddNote = async () => {
     if (!note.trim()) return
@@ -952,7 +956,6 @@ export default function LeadDetail() {
 
   const stage  = STAGE_MAP[lead.stage]
   const temp   = TEMP_MAP[lead.priority] || TEMP_MAP.warm
-  const noteTypeDef = ACTIVITY_TYPES.find(t => t.id === noteType) || ACTIVITY_TYPES[0]
   const noteColors  = TYPE_COLORS[noteType] || TYPE_COLORS.note
 
   const placeholders = {

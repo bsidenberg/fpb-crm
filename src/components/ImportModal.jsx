@@ -22,7 +22,7 @@ const CRM_FIELDS = [
 const CHUNK_SIZE = 50
 
 // Normalize header strings for fuzzy matching
-const norm = s => s.toLowerCase().replace(/[\s_\-]/g, '')
+const norm = s => s.toLowerCase().replace(/[\s_-]/g, '')
 
 const ALIASES = {
   first_name: ['firstname', 'first', 'fname', 'givenname'],

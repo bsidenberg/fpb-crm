@@ -24,7 +24,7 @@ function PinIcon({ size = 12 }) {
  *   onClear        () => void
  */
 export default function DistanceFilterButton({
-  centerAddress, radiusMiles, matchCount, totalCount, onApply, onClear,
+  centerAddress, radiusMiles, matchCount, onApply, onClear,
 }) {
   const [open,    setOpen]    = useState(false)
   const [address, setAddress] = useState('')

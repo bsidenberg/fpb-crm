@@ -111,7 +111,7 @@ const NAV = [
 
 export default function Layout() {
   const location = useLocation()
-  const { displayName, email, signOut } = useAuth()
+  const { displayName, signOut } = useAuth()
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--color-bg)', overflow: 'hidden' }}>
