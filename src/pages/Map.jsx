@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { GoogleMap, useJsApiLoader } from '@react-google-maps/api'
 import { MarkerClusterer } from '@googlemaps/markerclusterer'
 import { supabase } from '../lib/supabase'
+import { fetchAllLeads } from '../lib/fetchAllLeads'
 import { STAGES } from '../lib/stages'
 import DistanceFilterButton from '../components/DistanceFilterButton'
 import { geocodeAddress } from '../lib/geocode'
@@ -92,21 +93,24 @@ export default function Map() {
   })
 
   useEffect(() => {
+    let cancelled = false
     async function fetchLeads() {
-      const { data, error } = await supabase
-        .from('leads')
-        .select('id, first_name, last_name, company, city, zip, address, latitude, longitude, stage, value, phone, email, follow_up_date, notes, created_at')
-        .not('latitude', 'is', null)
-        .not('longitude', 'is', null)
-
-      if (error) {
-        setError(error.message)
-      } else {
-        setLeads(data || [])
+      try {
+        const data = await fetchAllLeads(supabase, {
+          columns: 'id, first_name, last_name, company, city, zip, address, latitude, longitude, stage, value, phone, email, follow_up_date, notes, created_at',
+          modify: (query) => query
+            .not('latitude', 'is', null)
+            .not('longitude', 'is', null),
+        })
+        if (!cancelled) setLeads(data)
+      } catch (err) {
+        if (!cancelled) setError(err.message)
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-      setLoading(false)
     }
     fetchLeads()
+    return () => { cancelled = true }
   }, [])
 
   const bounds = useMemo(() => {
