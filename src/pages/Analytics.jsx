@@ -4,6 +4,7 @@ import {
   LineChart, Line, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
+import { fetchAllLeads } from '../lib/fetchAllLeads'
 import { STAGES, TEMPERATURE } from '../lib/stages'
 import { normalizeSource } from '../lib/leadSource'
 
@@ -162,16 +163,26 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
       setLoading(true)
       const start = getRangeStart(range)
-      let query = supabase.from('leads').select('*')
-      if (start) query = query.gte('created_at', start)
-      const { data } = await query.order('created_at', { ascending: true })
-      setLeads(data || [])
-      setLoading(false)
+      try {
+        const data = await fetchAllLeads(supabase, {
+          modify: (query) => {
+            const filtered = start ? query.gte('created_at', start) : query
+            return filtered.order('created_at', { ascending: true })
+          },
+        })
+        if (!cancelled) setLeads(data)
+      } catch {
+        if (!cancelled) setLeads([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
     load()
+    return () => { cancelled = true }
   }, [range])
 
   // ── Derived stats ──────────────────────────────────────────────

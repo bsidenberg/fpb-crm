@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchAllLeads } from '../lib/fetchAllLeads'
 import { calculateScore } from '../utils/scoreLeads'
 
 const LeadsContext = createContext(null)
@@ -46,13 +47,24 @@ export function LeadsProvider({ children }) {
   }, [])
 
   const fetchLeads = useCallback(async () => {
-    // Fetch leads and activity counts in parallel
-    const [leadsResult, actResult] = await Promise.all([
-      supabase.from('leads').select('*').order('created_at', { ascending: false }),
-      supabase.from('activities').select('lead_id'),
-    ])
-
-    if (leadsResult.error || !leadsResult.data) { setLoading(false); setRefreshing(false); return }
+    // Fetch leads and activity counts in parallel. Leads are paged so the
+    // board is not capped at PostgREST's default 1000-row response.
+    let leadRows
+    let actResult
+    try {
+      const fetched = await Promise.all([
+        fetchAllLeads(supabase, {
+          modify: (query) => query.order('created_at', { ascending: false }),
+        }),
+        supabase.from('activities').select('lead_id'),
+      ])
+      leadRows = fetched[0]
+      actResult = fetched[1]
+    } catch {
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
 
     // Count activities per lead
     const actCounts = {}
@@ -62,7 +74,7 @@ export function LeadsProvider({ children }) {
 
     // Calculate fresh scores and collect leads where score changed
     const updates = []
-    const leadsWithScores = leadsResult.data.map(lead => {
+    const leadsWithScores = leadRows.map(lead => {
       const { score } = calculateScore(lead, actCounts[lead.id] || 0)
       if (score !== (lead.score ?? 0)) updates.push({ id: lead.id, score })
       return { ...lead, score }

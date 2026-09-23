@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test src/lib/leadSource.test.js",
+    "test": "node --test src/lib/leadSource.test.js src/lib/fetchAllLeads.test.js",
     "preview": "vite preview",
     "deploy": "vercel --prod",
     "backfill-geocoding": "node scripts/backfill-geocoding.js"
