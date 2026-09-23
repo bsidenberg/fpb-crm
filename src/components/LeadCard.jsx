@@ -3,6 +3,7 @@ import { useDraggable } from '@dnd-kit/core'
 import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNow, format, parseISO } from 'date-fns'
 import { TEMPERATURE } from '../lib/stages'
+import { normalizeSource } from '../lib/leadSource'
 import { getFollowUpStatus } from '../lib/followup'
 import { getScoreGrade } from '../utils/scoreLeads'
 import { supabase } from '../lib/supabase'
@@ -278,7 +279,7 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
         {/* Row 4: Structure size + Lead source pills (always shown) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
           <span style={pillStyle}>{lead.barn_size || '—'}</span>
-          <span style={pillStyle}>{lead.source || '—'}</span>
+          <span style={pillStyle}>{normalizeSource(lead) || '—'}</span>
         </div>
 
         {/* Row 5: Estimated value + Probability badge */}
@@ -377,6 +378,12 @@ function areLeadCardPropsEqual(prev, next) {
     a.city              === b.city              &&
     a.barn_size         === b.barn_size         &&
     a.source            === b.source            &&
+    a.lead_source       === b.lead_source       &&
+    a.utm_source        === b.utm_source        &&
+    a.utm_medium        === b.utm_medium        &&
+    a.gclid             === b.gclid             &&
+    a.fbclid            === b.fbclid            &&
+    a.referrer_url      === b.referrer_url      &&
     a.follow_up_date    === b.follow_up_date    &&
     a.last_contact_date === b.last_contact_date &&
     a._distance         === b._distance         &&

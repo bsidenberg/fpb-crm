@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { useAuth } from '../hooks/useAuth'
 import { STAGES, STAGE_MAP, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
+import { normalizeSource } from '../lib/leadSource'
 import { calculateScore, getScoreGrade } from '../utils/scoreLeads'
 import NewProjectModal from '../components/NewProjectModal'
 import { geocodeLead } from '../lib/geocode'
@@ -20,6 +21,11 @@ function normalizeEmptyStrings(obj) {
     out[key] = (typeof value === 'string' && value.trim() === '') ? null : value
   }
   return out
+}
+
+function leadFormState(row) {
+  if (!row) return {}
+  return { ...row, source: normalizeSource(row) }
 }
 
 // ─── Type colors (matches spec) ────────────────────────────────────────────
@@ -259,7 +265,21 @@ function CompactInfo({ lead, scoreData, onStageChange, tempOpen, setTempOpen, on
       <DenseRow label="HOA">
         {lead.hoa === true ? 'Yes' : lead.hoa === false ? 'No' : dash}
       </DenseRow>
-      <DenseRow label="Source">{lead.source || dash}</DenseRow>
+      <DenseRow label="Source">
+        {(() => {
+          const channel = normalizeSource(lead)
+          const raw = (lead.source || '').trim()
+          if (!channel) return dash
+          return (
+            <span>
+              {channel}
+              {raw && raw !== channel && (
+                <span style={{ color: 'var(--color-text-3)', fontWeight: 400 }}> · saved as {raw}</span>
+              )}
+            </span>
+          )
+        })()}
+      </DenseRow>
       <DenseRow label="Follow-Up">
         {lead.follow_up_date ? format(parseISO(lead.follow_up_date), 'MMM d, yyyy') : dash}
       </DenseRow>
@@ -779,7 +799,7 @@ export default function LeadDetail() {
       .channel(`lead-detail-${id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads', filter: `id=eq.${id}` }, (payload) => {
         setLead(payload.new)
-        setForm(payload.new)
+        setForm(leadFormState(payload.new))
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
@@ -820,7 +840,7 @@ export default function LeadDetail() {
     const { data, error } = await supabase.from('leads').select('*').eq('id', id).single()
     if (error || !data) { navigate('/'); return }
     setLead(data)
-    setForm(data)
+    setForm(leadFormState(data))
     setLoading(false)
   }
 
@@ -839,8 +859,12 @@ export default function LeadDetail() {
     setSaving(true)
     // Coerce numeric fields; strip read-only DB columns from the update payload
     const { id: _id, created_at, updated_at, score, user_email, ...editable } = form
+    if (Object.prototype.hasOwnProperty.call(form, 'lead_source')) {
+      editable.lead_source = form.source
+    }
     const payload = normalizeEmptyStrings({
       ...editable,
+      source: form.source,
       value:       form.value       !== '' && form.value       != null ? Number(form.value)       || null : null,
       probability: form.probability !== '' && form.probability != null ? Number(form.probability) || null : null,
     })
@@ -1043,7 +1067,7 @@ export default function LeadDetail() {
           {editing ? (
             <>
               <button
-                onClick={() => { setEditing(false); setForm(lead) }}
+                onClick={() => { setEditing(false); setForm(leadFormState(lead)) }}
                 style={{ padding: '7px 14px', borderRadius: 6, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-3)', fontSize: 12, cursor: 'pointer' }}
               >
                 Cancel
@@ -1104,7 +1128,7 @@ export default function LeadDetail() {
               {/* Save/Cancel at bottom when in edit mode */}
               <div style={{ display: 'flex', gap: 8, paddingTop: 12 }}>
                 <button
-                  onClick={() => { setEditing(false); setForm(lead) }}
+                  onClick={() => { setEditing(false); setForm(leadFormState(lead)) }}
                   style={{ flex: 1, padding: '8px', borderRadius: 6, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-3)', fontSize: 12, cursor: 'pointer' }}
                 >
                   Cancel

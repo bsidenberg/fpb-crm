@@ -18,10 +18,7 @@ export const TEMPERATURE = [
   { id: 'hot',  label: 'Hot',  color: '#C0272D', textColor: '#FFFFFF', bgColor: '#C0272D'  },
 ]
 
-export const LEAD_SOURCES = [
-  'Google Organic', 'Google Ads', 'Facebook', 'Referral',
-  'Cold Call', 'Direct', 'AI Search', 'Website', 'Other',
-]
+export { LEAD_SOURCES } from './leadSource'
 
 export const BARN_SIZES = [
   '20x30', '24x30', '24x40', '30x40',
