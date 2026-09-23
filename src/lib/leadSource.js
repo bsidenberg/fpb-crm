@@ -1,10 +1,11 @@
 /**
  * Canonical lead channels for Florida Pole Barn.
  *
- * Labels match floridapolebarn1 `resolveLeadSource` (lib/utm.ts): the site
- * writes "Organic Search", not "Google Organic", and "Meta Ads" for
- * facebook/instagram utm sources. Website Form / Website Chat are capture
- * methods, not channels.
+ * Labels match floridapolebarn1 `LEAD_CHANNELS` / `resolveLeadSource`
+ * (lib/utm.ts on main). Unpaid Google search is **Google Organic**.
+ * "Organic Search" is a historical alias of that same channel. Meta
+ * facebook/instagram utm sources are Meta Ads. Website Form / Website Chat
+ * are capture methods, not channels.
  *
  * Cold Call stays as a manual sales source. It is not a website channel.
  *
@@ -15,7 +16,7 @@
 
 export const LEAD_SOURCES = [
   'Google Ads',
-  'Organic Search',
+  'Google Organic',
   'Meta Ads',
   'Organic Social',
   'Referral',
@@ -70,13 +71,14 @@ const META_SOURCES = new Set([
   'facebook ads',
 ])
 
-const SEARCH_SOURCES = new Set([
-  'google',
+const OTHER_SEARCH_SOURCES = new Set([
   'bing',
   'yahoo',
   'duckduckgo',
   'ecosia',
   'brave',
+  'baidu',
+  'yandex',
 ])
 
 const AI_SOURCES = new Set([
@@ -111,12 +113,12 @@ const ALIASES = {
   googleads: 'Google Ads',
   ppc: 'Google Ads',
 
-  'google organic': 'Organic Search',
-  'organic search': 'Organic Search',
-  'google search': 'Organic Search',
-  organic: 'Organic Search',
-  seo: 'Organic Search',
-  google: 'Organic Search',
+  'google organic': 'Google Organic',
+  'organic search': 'Google Organic',
+  'google search': 'Google Organic',
+  organic: 'Google Organic',
+  seo: 'Google Organic',
+  google: 'Google Organic',
 
   'meta ads': 'Meta Ads',
   meta: 'Meta Ads',
@@ -202,26 +204,16 @@ function classifyUtm(utmSource, utmMedium) {
     return 'Email'
   }
   if (med === 'social' || med === 'organic social' || med === 'social organic') return 'Organic Social'
-  if (SEARCH_SOURCES.has(src)) return 'Organic Search'
+  if (src === 'google' || src === 'google com') return 'Google Organic'
+  if (OTHER_SEARCH_SOURCES.has(src)) return 'Other'
   if (AI_SOURCES.has(src)) return 'AI Search'
   if (SOCIAL_SOURCES.has(src)) return 'Organic Social'
   if (src === 'referral' || med === 'referral') return 'Referral'
   if (src === 'direct' || med === 'direct' || src === '(direct)' || src === '(none)' || src === 'none') {
     return 'Direct'
   }
-  if (med === 'organic' || med === 'seo') return 'Organic Search'
+  if (med === 'organic' || med === 'seo') return 'Google Organic'
   return null
-}
-
-function referrerHost(referrerUrl) {
-  const raw = text(referrerUrl)
-  if (!raw) return ''
-  try {
-    const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
-    return new URL(withProto).hostname.toLowerCase().replace(/^www\./, '')
-  } catch {
-    return ''
-  }
 }
 
 function hostIs(host, root) {
@@ -259,13 +251,18 @@ function isGoogleAdsHost(host) {
     || hostIs(host, 'doubleclick.net')
 }
 
-function isSearchHost(host) {
-  return hostIs(host, 'google.com')
-    || host.startsWith('google.')
-    || hostIs(host, 'bing.com')
+function isGoogleSearchHost(host) {
+  return hostIs(host, 'google.com') || host.startsWith('google.')
+}
+
+function isOtherSearchHost(host) {
+  return hostIs(host, 'bing.com')
     || hostIs(host, 'yahoo.com')
     || hostIs(host, 'duckduckgo.com')
     || hostIs(host, 'ecosia.org')
+    || hostIs(host, 'baidu.com')
+    || hostIs(host, 'yandex.com')
+    || hostIs(host, 'yandex.ru')
     || host === 'search.brave.com'
 }
 
@@ -289,11 +286,26 @@ function isSocialHost(host) {
 }
 
 function classifyReferrer(referrerUrl) {
-  const host = referrerHost(referrerUrl)
+  const raw = text(referrerUrl)
+  if (!raw) return null
+  let host = ''
+  let pathname = ''
+  try {
+    const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+    const url = new URL(withProto)
+    host = url.hostname.toLowerCase().replace(/^www\./, '')
+    pathname = url.pathname.toLowerCase()
+  } catch {
+    return null
+  }
   if (!host || isInternalHost(host)) return null
   if (isAiHost(host)) return 'AI Search'
   if (isGoogleAdsHost(host)) return 'Google Ads'
-  if (isSearchHost(host)) return 'Organic Search'
+  if (isGoogleSearchHost(host) && (pathname.includes('/aclk') || pathname.includes('/pagead'))) {
+    return 'Google Ads'
+  }
+  if (isGoogleSearchHost(host)) return 'Google Organic'
+  if (isOtherSearchHost(host)) return 'Other'
   if (isSocialHost(host)) return 'Organic Social'
   return 'Referral'
 }

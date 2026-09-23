@@ -2,11 +2,13 @@
 -- and by floridapolebarn1 (lib/utm.ts resolveLeadSource).
 --
 -- Canonical channels:
---   Google Ads, Organic Search, Meta Ads, Organic Social, Referral,
+--   Google Ads, Google Organic, Meta Ads, Organic Social, Referral,
 --   Direct, AI Search, Email, Cold Call, Other
 --
--- Organic Search (not "Google Organic") matches the website resolver.
+-- Unpaid Google search is Google Organic (floridapolebarn1 LEAD_CHANNELS).
+-- "Organic Search", organic, and seo are aliases of that channel.
 -- Website Form / Website Chat are capture methods, not channels.
+-- Cold Call is a manual CRM-only source.
 --
 -- HOW TO RUN
 --   Brian: open Supabase → SQL Editor → New query → paste this file → Run.
@@ -34,17 +36,17 @@
 --   4. utm facebook/instagram/fb/ig/meta → Meta Ads
 --   5. other utm_source / utm_medium maps
 --   6. alias of source, then lead_source
---      (a recognized label such as Facebook or Google Organic beats the
---      referrer, so "fb" stays Meta Ads instead of splitting into Organic
---      Social just because referrer_url is facebook.com. Website Form has
---      no alias, so it still falls through to the referrer.)
+--      (a recognized label such as Facebook or Organic Search beats the
+--      referrer, so "fb" stays Meta Ads and "Organic Search" becomes
+--      Google Organic instead of being re-split by the referrer. Website
+--      Form has no alias, so it still falls through to the referrer.)
 --   7. referrer_url host
 --   8. blank / Unknown  → Direct
 --   9. anything else (including Website Form / Website Chat with no signal) → Other
 --
 -- A source that is already canonical is left alone so a sales rep's manual
 -- pick is not overwritten on a second run. Click ids still reclassify
--- Website Form, Unknown, Google Organic, Facebook, fb, and blanks.
+-- Website Form, Unknown, Organic Search, Facebook, fb, and blanks.
 --
 -- The website quote API does not yet write gclid/fbclid onto leads (it sends
 -- them to the marketing bot only). Those columns are added here so a future
@@ -89,7 +91,7 @@ AS $$
     ) THEN NULL
     WHEN key IN ('unknown', 'n a', 'na', 'null', 'undefined', 'not set', '—') THEN NULL
     WHEN key IN ('google ads', 'google adwords', 'adwords', 'googleads', 'ppc') THEN 'Google Ads'
-    WHEN key IN ('google organic', 'organic search', 'google search', 'organic', 'seo', 'google') THEN 'Organic Search'
+    WHEN key IN ('google organic', 'organic search', 'google search', 'organic', 'seo', 'google') THEN 'Google Organic'
     WHEN key IN ('meta ads', 'meta', 'facebook', 'facebook ads', 'fb', 'instagram', 'ig') THEN 'Meta Ads'
     WHEN key IN ('organic social', 'social') THEN 'Organic Social'
     WHEN key IN ('referral', 'referred', 'word of mouth') THEN 'Referral'
@@ -125,7 +127,7 @@ DECLARE
   paid boolean;
 BEGIN
   IF src IN (
-    'Google Ads', 'Organic Search', 'Meta Ads', 'Organic Social',
+    'Google Ads', 'Google Organic', 'Meta Ads', 'Organic Social',
     'Referral', 'Direct', 'AI Search', 'Email', 'Cold Call', 'Other'
   ) THEN
     RETURN src;
@@ -159,8 +161,10 @@ BEGIN
       RETURN 'Email';
     ELSIF utm_med IN ('social', 'organic social', 'social organic') THEN
       RETURN 'Organic Social';
-    ELSIF utm_src IN ('google', 'bing', 'yahoo', 'duckduckgo', 'ecosia', 'brave') THEN
-      RETURN 'Organic Search';
+    ELSIF utm_src IN ('google', 'google com') THEN
+      RETURN 'Google Organic';
+    ELSIF utm_src IN ('bing', 'yahoo', 'duckduckgo', 'ecosia', 'brave', 'baidu', 'yandex') THEN
+      RETURN 'Other';
     ELSIF utm_src IN ('chatgpt', 'openai', 'perplexity', 'claude', 'anthropic', 'gemini', 'bard', 'copilot', 'phind', 'grok') THEN
       RETURN 'AI Search';
     ELSIF utm_src IN ('twitter', 'linkedin', 'tiktok', 'youtube', 'pinterest', 'nextdoor', 'reddit', 'threads') THEN
@@ -170,7 +174,7 @@ BEGIN
     ELSIF utm_src IN ('direct', '(direct)', '(none)', 'none') OR utm_med = 'direct' THEN
       RETURN 'Direct';
     ELSIF utm_med IN ('organic', 'seo') THEN
-      RETURN 'Organic Search';
+      RETURN 'Google Organic';
     END IF;
   END IF;
 
@@ -217,14 +221,23 @@ BEGIN
        OR ref_host = 'doubleclick.net' OR ref_host LIKE '%.doubleclick.net'
     THEN
       RETURN 'Google Ads';
-    ELSIF ref_host = 'google.com' OR ref_host LIKE '%.google.com' OR ref_host LIKE 'google.%'
-       OR ref_host = 'bing.com' OR ref_host LIKE '%.bing.com'
+    ELSIF ref_host = 'google.com' OR ref_host LIKE '%.google.com' OR ref_host LIKE 'google.%' THEN
+      IF position('/aclk' in lower(coalesce(p_referrer_url, ''))) > 0
+         OR position('/pagead' in lower(coalesce(p_referrer_url, ''))) > 0
+      THEN
+        RETURN 'Google Ads';
+      END IF;
+      RETURN 'Google Organic';
+    ELSIF ref_host = 'bing.com' OR ref_host LIKE '%.bing.com'
        OR ref_host = 'yahoo.com' OR ref_host LIKE '%.yahoo.com'
        OR ref_host = 'duckduckgo.com' OR ref_host LIKE '%.duckduckgo.com'
        OR ref_host = 'ecosia.org' OR ref_host LIKE '%.ecosia.org'
+       OR ref_host = 'baidu.com' OR ref_host LIKE '%.baidu.com'
+       OR ref_host = 'yandex.com' OR ref_host LIKE '%.yandex.com'
+       OR ref_host = 'yandex.ru' OR ref_host LIKE '%.yandex.ru'
        OR ref_host = 'search.brave.com'
     THEN
-      RETURN 'Organic Search';
+      RETURN 'Other';
     ELSIF ref_host = 'facebook.com' OR ref_host LIKE '%.facebook.com'
        OR ref_host = 'fb.com' OR ref_host LIKE '%.fb.com'
        OR ref_host = 'instagram.com' OR ref_host LIKE '%.instagram.com'

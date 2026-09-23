@@ -5,7 +5,7 @@ import { normalizeSource, LEAD_SOURCES } from './leadSource.js'
 test('canonical list has one label per channel and no capture methods', () => {
   assert.deepEqual(LEAD_SOURCES, [
     'Google Ads',
-    'Organic Search',
+    'Google Organic',
     'Meta Ads',
     'Organic Social',
     'Referral',
@@ -15,21 +15,23 @@ test('canonical list has one label per channel and no capture methods', () => {
     'Cold Call',
     'Other',
   ])
-  for (const blocked of ['Website Form', 'Website Chat', 'Website', 'Google Organic', 'Facebook']) {
+  for (const blocked of ['Website Form', 'Website Chat', 'Website', 'Organic Search', 'Facebook']) {
     assert.equal(LEAD_SOURCES.includes(blocked), false)
   }
 })
 
 test('keeps an already canonical source, including a manual pick', () => {
   assert.equal(normalizeSource({ source: 'Referral', gclid: 'abc' }), 'Referral')
-  assert.equal(normalizeSource({ source: 'Organic Search', gclid: 'abc' }), 'Organic Search')
+  assert.equal(normalizeSource({ source: 'Google Organic', gclid: 'abc' }), 'Google Organic')
   assert.equal(normalizeSource({ source: 'Cold Call' }), 'Cold Call')
   assert.equal(normalizeSource({ source: 'Direct', referrer_url: 'https://google.com' }), 'Direct')
 })
 
 test('maps historical aliases', () => {
-  assert.equal(normalizeSource({ source: 'Google Organic' }), 'Organic Search')
-  assert.equal(normalizeSource({ source: 'organic' }), 'Organic Search')
+  assert.equal(normalizeSource({ source: 'Organic Search' }), 'Google Organic')
+  assert.equal(normalizeSource({ source: 'organic' }), 'Google Organic')
+  assert.equal(normalizeSource({ source: 'seo' }), 'Google Organic')
+  assert.equal(normalizeSource('Organic Search'), 'Google Organic')
   assert.equal(normalizeSource({ source: 'Facebook' }), 'Meta Ads')
   assert.equal(normalizeSource({ source: 'fb' }), 'Meta Ads')
   assert.equal(normalizeSource({ source: 'IG' }), 'Meta Ads')
@@ -55,14 +57,22 @@ test('reclassifies capture methods and unknowns from signals', () => {
   assert.equal(normalizeSource({ source: 'Website Form', utm_source: 'fb', utm_medium: 'social' }), 'Meta Ads')
   assert.equal(normalizeSource({ source: 'Website Form', utm_medium: 'social' }), 'Organic Social')
   assert.equal(normalizeSource({ source: 'Website Form', utm_medium: 'email' }), 'Email')
-  assert.equal(normalizeSource({ source: 'Google Organic', gclid: 'abc' }), 'Google Ads')
+  assert.equal(normalizeSource({ source: 'Organic Search', gclid: 'abc' }), 'Google Ads')
+  assert.equal(normalizeSource({
+    source: 'Website Form',
+    utm_source: 'google',
+  }), 'Google Organic')
+  assert.equal(normalizeSource({
+    source: 'Website Form',
+    utm_medium: 'organic',
+  }), 'Google Organic')
 })
 
 test('uses referrer only after labels and utm fail', () => {
   assert.equal(normalizeSource({
     source: 'Unknown',
     referrer_url: 'https://www.google.com/search?q=pole+barn',
-  }), 'Organic Search')
+  }), 'Google Organic')
   assert.equal(normalizeSource({
     source: 'Website Form',
     referrer_url: 'https://www.facebook.com/floridapolebarn',
@@ -83,6 +93,14 @@ test('uses referrer only after labels and utm fail', () => {
     source: 'Website Form',
     referrer_url: 'https://www.googleadservices.com/pagead',
   }), 'Google Ads')
+  assert.equal(normalizeSource({
+    source: 'Website Form',
+    referrer_url: 'https://www.google.com/aclk?sa=l',
+  }), 'Google Ads')
+  assert.equal(normalizeSource({
+    source: 'Unknown',
+    referrer_url: 'https://www.bing.com/search?q=pole+barn',
+  }), 'Other')
   assert.equal(normalizeSource({
     source: 'Website Form',
     referrer_url: 'https://floridapolebarn.com/quote',
@@ -107,6 +125,6 @@ test('blank or unknown with no signals is Direct; capture method with no signals
 test('lead_source fills in when source is a capture method', () => {
   assert.equal(normalizeSource({
     source: 'Website Form',
-    lead_source: 'Google Organic',
-  }), 'Organic Search')
+    lead_source: 'Organic Search',
+  }), 'Google Organic')
 })
