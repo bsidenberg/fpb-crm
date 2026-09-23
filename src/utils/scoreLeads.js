@@ -1,3 +1,5 @@
+import { normalizeSource } from '../lib/leadSource'
+
 /**
  * Calculates a lead quality score (0–100) and a detailed breakdown.
  * @param {object} lead          - Lead row from Supabase
@@ -42,7 +44,7 @@ export function calculateScore(lead, activityCount = 0) {
   }
 
   // ── Source ───────────────────────────────────────────────────
-  if (lead.source === 'Referral' || lead.lead_source === 'Referral') {
+  if (normalizeSource(lead) === 'Referral') {
     raw += 8; breakdown.push({ label: 'Referral source', pts: 8 })
   }
 

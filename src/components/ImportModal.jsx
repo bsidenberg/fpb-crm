@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '../lib/supabase'
+import { normalizeSource } from '../lib/leadSource'
 import { useToast } from '../lib/toast'
 
 // CRM fields we support importing
@@ -147,7 +148,7 @@ export default function ImportModal({ open, onClose, onSaved }) {
         address:    getValue(row, 'address')     || null,
         city:       getValue(row, 'city')        || null,
         zip:        getValue(row, 'zip')         || null,
-        source:     getValue(row, 'source')      || null,
+        source:     getValue(row, 'source') ? normalizeSource(getValue(row, 'source')) : null,
         value:      parseNumericValue(getValue(row, 'value')),
         barn_size:  getValue(row, 'barn_size')   || null,
         notes:      getValue(row, 'notes')       || null,

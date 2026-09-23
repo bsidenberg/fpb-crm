@@ -4,7 +4,8 @@ import {
   LineChart, Line, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { STAGES, TEMPERATURE, TAGS } from '../lib/stages'
+import { STAGES, TEMPERATURE } from '../lib/stages'
+import { normalizeSource } from '../lib/leadSource'
 
 // ─── Brand colors ────────────────────────────────────────────────
 const RED    = '#C0272D'
@@ -36,6 +37,27 @@ function getRangeStart(rangeId) {
 }
 
 // ─── Tooltip component ────────────────────────────────────────────
+function SourceTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const row = payload[0].payload
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #D1D5DB',
+      borderRadius: 8, padding: '8px 12px',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+      fontSize: 13, maxWidth: 280,
+    }}>
+      <div style={{ fontWeight: 600, color: '#3A3A3A', marginBottom: 4 }}>{label}</div>
+      <div style={{ color: '#374151' }}>{Number(row.count).toLocaleString()} leads</div>
+      {row.rawLabel && (
+        <div style={{ color: '#6B7280', marginTop: 6, fontSize: 12, lineHeight: 1.4 }}>
+          Saved under another name: {row.rawLabel}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BrandTooltip({ active, payload, label, prefix = '', suffix = '' }) {
   if (!active || !payload?.length) return null
   return (
@@ -166,14 +188,25 @@ export default function Analytics() {
 
   // ── Leads by source ────────────────────────────────────────────
   const bySource = useMemo(() => {
-    const counts = {}
+    const groups = new Map()
     for (const l of leads) {
-      const src = l.source || 'Unknown'
-      counts[src] = (counts[src] || 0) + 1
+      const channel = normalizeSource(l)
+      const raw = (l.source || '').trim()
+      if (!groups.has(channel)) groups.set(channel, { source: channel, count: 0, raws: new Map() })
+      const group = groups.get(channel)
+      group.count += 1
+      if (raw && raw !== channel) group.raws.set(raw, (group.raws.get(raw) || 0) + 1)
     }
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([source, count]) => ({ source, count }))
+    return [...groups.values()]
+      .sort((a, b) => b.count - a.count)
+      .map(group => ({
+        source: group.source,
+        count: group.count,
+        rawLabel: [...group.raws.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, count]) => `${name} (${count})`)
+          .join(', '),
+      }))
   }, [leads])
 
   // ── Pipeline by stage ──────────────────────────────────────────
@@ -317,12 +350,21 @@ export default function Analytics() {
 
           {/* 1. Leads by Source */}
           <ChartCard title="Leads by Source" loading={loading} empty={!loading && bySource.length === 0}>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={bySource} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={bySource} margin={{ top: 4, right: 8, left: -16, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-                <XAxis dataKey="source" tick={chartAxisStyle} axisLine={false} tickLine={false} />
+                <XAxis
+                  dataKey="source"
+                  tick={{ ...chartAxisStyle, fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={0}
+                  angle={-28}
+                  textAnchor="end"
+                  height={72}
+                />
                 <YAxis tick={chartAxisStyle} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip content={<BrandTooltip />} cursor={{ fill: '#F9FAFB' }} />
+                <Tooltip content={<SourceTooltip />} cursor={{ fill: '#F9FAFB' }} />
                 <Bar dataKey="count" name="Leads" fill={RED} radius={[4, 4, 0, 0]} maxBarSize={48} />
               </BarChart>
             </ResponsiveContainer>
