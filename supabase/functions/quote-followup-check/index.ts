@@ -163,16 +163,19 @@ Deno.serve(async () => {
     //    meantime is not yanked back; only rows actually moved are reported.
     //    Also re-check quote_sent_at: a lead re-quoted mid-run has a fresh stamp.
     const staleAll = stale.map((l: Lead) => l.id)
+    //    Each chunk commits on its own. If a later chunk fails, stop but still
+    //    log notes + email for the rows already moved, so no write goes unreported.
     const movedIds = new Set<string>()
+    let updateErr: unknown = null
     for (let i = 0; i < staleAll.length; i += ID_CHUNK) {
-      const { data: movedRows, error: updateErr } = await db
+      const { data: movedRows, error } = await db
         .from('leads')
         .update({ stage: 'contacted_waiting', stage_changed_at: new Date().toISOString() })
         .in('id', staleAll.slice(i, i + ID_CHUNK))
         .eq('stage', 'estimate_sent')
         .lt('quote_sent_at', cutoff)
         .select('id')
-      if (updateErr) throw updateErr
+      if (error) { updateErr = error; console.error('update chunk failed:', error); break }
       for (const r of movedRows ?? []) movedIds.add(r.id)
     }
 
@@ -180,6 +183,7 @@ Deno.serve(async () => {
     const staleIds = moved.map((l: Lead) => l.id)
 
     if (moved.length === 0) {
+      if (updateErr) throw updateErr
       return new Response(
         JSON.stringify({ ok: true, moved: 0, message: 'Candidates changed stage before update' }),
         { headers: { 'Content-Type': 'application/json' } },
@@ -221,8 +225,11 @@ Deno.serve(async () => {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, moved: moved.length, ids: staleIds, activityLogged: !actErr }),
-      { headers: { 'Content-Type': 'application/json' } },
+      JSON.stringify({
+        ok: !updateErr, moved: moved.length, ids: staleIds, activityLogged: !actErr,
+        ...(updateErr ? { error: String((updateErr as { message?: string }).message ?? updateErr) } : {}),
+      }),
+      { status: updateErr ? 500 : 200, headers: { 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error('quote-followup-check error:', err)
