@@ -13,7 +13,7 @@ interface Lead {
   phone: string | null
   city: string | null
   value: number | null
-  quote_sent_at: string
+  quote_sent_at: string | null
 }
 
 function formatValue(v: number | null): string {
@@ -65,7 +65,7 @@ function buildEmail(leads: Lead[]): string {
         Auto Follow-Up Alert
       </div>
       <div style="font-size:13px;color:#6B7280;padding-bottom:14px;">
-        ${count} lead${count !== 1 ? 's' : ''} auto-moved to <strong style="color:#D97706;">Follow-Up</strong> — no response after 24 hours in Quote Sent
+        ${count} lead${count !== 1 ? 's' : ''} auto-moved to <strong style="color:#D97706;">Contacted - Waiting on Them</strong> — no activity for 24 hours after the estimate was sent
       </div>
     </div>
 
@@ -98,11 +98,13 @@ Deno.serve(async () => {
 
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
-    // 1. Find all leads still in quote_sent for 24+ hours
+    // 1. Find leads in Estimate Sent whose estimate went out 24+ hours ago.
+    //    Leads with NULL quote_sent_at (sent before the column existed) never
+    //    match .lt() and are deliberately left alone.
     const { data: candidates, error: fetchErr } = await db
       .from('leads')
       .select('id, first_name, last_name, phone, city, value, quote_sent_at')
-      .eq('stage', 'quote_sent')
+      .eq('stage', 'estimate_sent')
       .lt('quote_sent_at', cutoff)
 
     if (fetchErr) throw fetchErr
@@ -133,28 +135,42 @@ Deno.serve(async () => {
       )
     }
 
-    // 3. Move each stale lead to follow_up and log an activity
-    const staleIds = stale.map((l: Lead) => l.id)
-
-    const { error: updateErr } = await db
+    // 3. Move each stale lead to Contacted - Waiting on Them and log an activity.
+    //    Re-check the stage in the UPDATE so a lead someone moved in the
+    //    meantime is not yanked back; only rows actually moved are reported.
+    const { data: movedRows, error: updateErr } = await db
       .from('leads')
-      .update({ stage: 'follow_up' })
-      .in('id', staleIds)
+      .update({ stage: 'contacted_waiting', stage_changed_at: new Date().toISOString() })
+      .in('id', stale.map((l: Lead) => l.id))
+      .eq('stage', 'estimate_sent')
+      .select('id')
 
     if (updateErr) throw updateErr
+
+    const movedIds = new Set((movedRows ?? []).map((r: { id: string }) => r.id))
+    const moved = stale.filter((l: Lead) => movedIds.has(l.id))
+    const staleIds = moved.map((l: Lead) => l.id)
+
+    if (moved.length === 0) {
+      return new Response(
+        JSON.stringify({ ok: true, moved: 0, message: 'Candidates changed stage before update' }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+    }
 
     const activityRows = staleIds.map((lead_id: string) => ({
       lead_id,
       type: 'note',
-      body: 'Auto-moved to Follow-Up: no response after 24 hours in Quote Sent',
+      body: 'Auto-moved to Contacted - Waiting on Them: no activity for 24 hours after the estimate was sent',
       author: 'FPB CRM Bot',
     }))
 
-    await db.from('activities').insert(activityRows)
+    const { error: actErr } = await db.from('activities').insert(activityRows)
+    if (actErr) console.error('activity insert failed:', actErr)
 
-    // 4. Send summary email via Resend
-    const subject = `FPB CRM: ${stale.length} lead${stale.length !== 1 ? 's' : ''} auto-moved to Follow-Up`
-    const html = buildEmail(stale as Lead[])
+    // 4. Send ONE summary email (staff inbox only) via Resend
+    const subject = `FPB CRM: ${moved.length} lead${moved.length !== 1 ? 's' : ''} auto-moved to Contacted - Waiting on Them`
+    const html = buildEmail(moved as Lead[])
 
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -177,7 +193,7 @@ Deno.serve(async () => {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, moved: stale.length, ids: staleIds }),
+      JSON.stringify({ ok: true, moved: moved.length, ids: staleIds }),
       { headers: { 'Content-Type': 'application/json' } },
     )
   } catch (err) {

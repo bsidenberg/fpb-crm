@@ -34,10 +34,11 @@ export function applyLeadChanges(leads, payloads, scoreFor = () => 0) {
 }
 
 // Fields written when a lead changes stage, from the board or the detail page.
-// NOTE: there is no quote_sent_at column on leads — sending it would make
-// PostgREST reject the whole update. Add it here once the column exists.
+// quote_sent_at (migration 20261005000001) drives quote-followup-check.
 export function stageChangeFields(stage, now = new Date().toISOString()) {
-  return { stage, stage_changed_at: now }
+  const fields = { stage, stage_changed_at: now }
+  if (stage === 'estimate_sent') fields.quote_sent_at = now
+  return fields
 }
 
 // Collects realtime payloads and hands them to `onFlush` as one batch, `delay`
