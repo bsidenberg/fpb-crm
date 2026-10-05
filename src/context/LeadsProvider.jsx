@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback } f
 import { supabase } from '../lib/supabase'
 import { fetchAllLeads } from '../lib/fetchAllLeads'
 import { calculateScore } from '../utils/scoreLeads'
+import { patchLead, applyLeadChanges, createChangeBatcher } from '../lib/leadsState'
 
 const LeadsContext = createContext(null)
 
@@ -23,27 +24,16 @@ export function LeadsProvider({ children }) {
 
   // ── Drag-gate refs ────────────────────────────────────────────────────────
   // isDraggingRef: set true while a card drag is in progress so we don't
-  // apply realtime changes mid-drag. Changes are queued and flushed on drop.
-  const isDraggingRef     = useRef(false)
-  const pendingUpdatesRef = useRef([])
-  const pollingRef        = useRef(null)
+  // apply realtime changes mid-drag. Changes stay queued and flush on drop.
+  const isDraggingRef = useRef(false)
+  const pollingRef    = useRef(null)
+  const batcherRef    = useRef(null)
 
-  const applyLeadChange = useCallback((payload) => {
-    if (payload.eventType === 'INSERT') {
-      const { score } = calculateScore(payload.new, 0)
-      setLeads(prev => {
-        if (prev.some(l => l.id === payload.new.id)) return prev // dedup
-        return [...prev, { ...payload.new, score }]
-      })
-    }
-    if (payload.eventType === 'UPDATE') {
-      setLeads(prev => prev.map(l =>
-        l.id === payload.new.id ? { ...payload.new, score: payload.new.score ?? l.score } : l
-      ))
-    }
-    if (payload.eventType === 'DELETE') {
-      setLeads(prev => prev.filter(l => l.id !== payload.old.id))
-    }
+  // Optimistic local patch of one lead. Callers that save a lead (board drag,
+  // detail page) call this so the board reflects the change immediately
+  // without depending on the realtime echo.
+  const updateLead = useCallback((id, changes) => {
+    setLeads(prev => patchLead(prev, id, changes))
   }, [])
 
   const fetchLeads = useCallback(async () => {
@@ -111,20 +101,20 @@ export function LeadsProvider({ children }) {
   // NOTE: Enable replication for the `leads` table in the Supabase Dashboard:
   // Database → Replication → supabase_realtime → toggle ON for "leads"
   useEffect(() => {
-    let debounceTimer = null
+    // Realtime payloads are batched (never dropped) and applied in one setLeads.
+    const batcher = createChangeBatcher({
+      delay: 100,
+      isPaused: () => isDraggingRef.current,
+      onFlush: (batch) => setLeads(prev =>
+        applyLeadChanges(prev, batch, row => calculateScore(row, 0).score)
+      ),
+    })
+    batcherRef.current = batcher
 
     const channel = supabase
       .channel('board-leads-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, (payload) => {
-        clearTimeout(debounceTimer)
-        debounceTimer = setTimeout(() => {
-          if (isDraggingRef.current) {
-            // Queue updates that arrive during a drag — flush when drag ends
-            pendingUpdatesRef.current.push(payload)
-          } else {
-            applyLeadChange(payload)
-          }
-        }, 100)
+        batcher.push(payload)
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
@@ -137,24 +127,20 @@ export function LeadsProvider({ children }) {
       })
 
     return () => {
-      clearTimeout(debounceTimer)
+      batcher.cancel()
+      batcherRef.current = null
       if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null }
       supabase.removeChannel(channel)
     }
-  }, [applyLeadChange, triggerFetch])
-
-  const flushPending = useCallback(() => {
-    for (const payload of pendingUpdatesRef.current) applyLeadChange(payload)
-    pendingUpdatesRef.current = []
-  }, [applyLeadChange])
+  }, [triggerFetch])
 
   const handleDragStateChange = useCallback((dragging) => {
     isDraggingRef.current = dragging
-    if (!dragging) flushPending()
-  }, [flushPending])
+    if (!dragging) batcherRef.current?.flush()
+  }, [])
 
   return (
-    <LeadsContext.Provider value={{ leads, loading, refreshing, fetchLeads: triggerFetch, handleDragStateChange }}>
+    <LeadsContext.Provider value={{ leads, loading, refreshing, fetchLeads: triggerFetch, updateLead, handleDragStateChange }}>
       {children}
     </LeadsContext.Provider>
   )

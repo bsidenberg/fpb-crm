@@ -9,6 +9,7 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { STAGES } from '../lib/stages'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
+import { stageChangeFields, pickFields } from '../lib/leadsState'
 import KanbanColumn from './KanbanColumn'
 import LeadCard from './LeadCard'
 
@@ -35,7 +36,7 @@ function findContainer(items, id) {
   return Object.keys(items).find(key => items[key].some(item => item.id === id))
 }
 
-export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragStateChange, filterRadius }) {
+export default function KanbanBoard({ leads, onLeadUpdate, onAddLead, onDragStateChange, filterRadius }) {
   const toast = useToast()
   const [items, setItems] = useState(() => buildItems(leads))
   const [activeId, setActiveId] = useState(null)
@@ -101,11 +102,11 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
     const movedLead = itemsRef.current[sourceStage]?.find(l => l.id === leadId)
     if (!movedLead) return
 
-    // Optimistic update — move card to target column and re-sort
-    const now     = new Date().toISOString()
-    const updates = { stage: targetStage, stage_changed_at: now }
-    if (targetStage === 'estimate_sent') updates.quote_sent_at = now
-
+    // Optimistic update — move the card locally and in the shared leads list.
+    // Patching the shared list is what keeps the card in place: the effect
+    // above rebuilds columns from `leads` on every change and on remount.
+    const updates     = stageChangeFields(targetStage)
+    const prior       = pickFields(movedLead, updates)
     const updatedLead = { ...movedLead, ...updates }
     const newItems = {
       ...itemsRef.current,
@@ -115,14 +116,12 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
     }
     itemsRef.current = newItems
     setItems(newItems)
+    onLeadUpdate?.(leadId, updates)
 
-    console.log('[Drag] leadId:', leadId, typeof leadId)
-    console.log('[Drag] updating stage to:', targetStage)
-
-    // Step 1: update stage only — always safe regardless of schema state
+    // .select() so a zero-row update (e.g. blocked by RLS) counts as a failure
     const { data, error } = await supabase
       .from('leads')
-      .update({ stage: targetStage })
+      .update(updates)
       .eq('id', leadId)
       .select()
 
@@ -130,27 +129,13 @@ export default function KanbanBoard({ leads, onLeadsChange, onAddLead, onDragSta
       const msg = error ? error.message : 'permission denied'
       console.error('[Drag] stage save FAILED:', msg)
       toast(`Move not saved — ${msg}`, 'error')
-      const reverted = buildItems(leads)
-      itemsRef.current = reverted
-      setItems(reverted)
+      onLeadUpdate?.(leadId, prior)
       return
-    }
-
-    console.log('[Drag] stage saved successfully', leadId, '→', targetStage)
-
-    // Step 2: try stage_changed_at separately — silently skipped if column missing
-    const { error: tsError } = await supabase
-      .from('leads')
-      .update({ stage_changed_at: now })
-      .eq('id', leadId)
-
-    if (tsError) {
-      console.warn('[Drag] stage_changed_at update skipped (column may not exist):', tsError.message)
     }
 
     const stageName = STAGES.find(s => s.id === targetStage)?.label
     toast(`Moved to ${stageName}`, 'success')
-  }, [leads, toast, onDragStateChange])
+  }, [toast, onDragStateChange, onLeadUpdate])
 
   const activeCard = activeId
     ? Object.values(items).flat().find(l => l.id === activeId)

@@ -6,6 +6,8 @@ import { useToast } from '../lib/toast'
 import { useAuth } from '../hooks/useAuth'
 import { STAGES, STAGE_MAP, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
 import { normalizeSource } from '../lib/leadSource'
+import { stageChangeFields, pickFields } from '../lib/leadsState'
+import { useLeads } from '../context/LeadsProvider'
 import { calculateScore, getScoreGrade } from '../utils/scoreLeads'
 import NewProjectModal from '../components/NewProjectModal'
 import { geocodeLead } from '../lib/geocode'
@@ -763,6 +765,7 @@ export default function LeadDetail() {
   const navigate = useNavigate()
   const toast = useToast()
   const { displayName, email: userEmail } = useAuth()
+  const { updateLead } = useLeads()
   const { otherViewers } = usePresence({
     channelKey: id ? `lead:${id}` : null,
     userEmail,
@@ -868,12 +871,16 @@ export default function LeadDetail() {
       value:       form.value       !== '' && form.value       != null ? Number(form.value)       || null : null,
       probability: form.probability !== '' && form.probability != null ? Number(form.probability) || null : null,
     })
+    if (payload.stage && payload.stage !== lead.stage) {
+      Object.assign(payload, stageChangeFields(payload.stage))
+    }
     const addrChanged = (form.address !== lead.address) || (form.city !== lead.city) || (form.zip !== lead.zip)
     const { error } = await supabase.from('leads').update(payload).eq('id', id)
     setSaving(false)
     if (error) { toast('Save failed: ' + error.message, 'error'); return }
     toast('Lead updated')
     setLead(prev => ({ ...prev, ...payload }))
+    updateLead(id, payload)
     setEditing(false)
     // Fire-and-forget re-geocode if address fields changed
     if (addrChanged && (form.address || form.city || form.zip)) {
@@ -892,14 +899,15 @@ export default function LeadDetail() {
   }
 
   const handleStageChange = async (newStage) => {
-    const prevStage = lead.stage
-    const now = new Date().toISOString()
-    setLead(l => ({ ...l, stage: newStage, stage_changed_at: now }))
-    const updates = { stage: newStage, stage_changed_at: now }
-    if (newStage === 'quote_sent') updates.quote_sent_at = now
+    const updates = stageChangeFields(newStage)
+    const prior   = pickFields(lead, updates)
+    // Patch the shared leads list too, so the board shows the new column on return
+    setLead(l => ({ ...l, ...updates }))
+    updateLead(id, updates)
     const { data, error } = await supabase.from('leads').update(updates).eq('id', id).select()
     if (error || !data || data.length === 0) {
-      setLead(l => ({ ...l, stage: prevStage }))
+      setLead(l => ({ ...l, ...prior }))
+      updateLead(id, prior)
       toast('Stage update failed — not saved', 'error')
     } else {
       toast(`Stage → ${STAGE_MAP[newStage]?.label}`)
@@ -910,14 +918,16 @@ export default function LeadDetail() {
     setTempOpen(false)
     const prev = lead.priority
     setLead(l => ({ ...l, priority: newPriority }))
+    updateLead(id, { priority: newPriority })
     const { error } = await supabase.from('leads').update({ priority: newPriority }).eq('id', id)
     if (error) {
       setLead(l => ({ ...l, priority: prev }))
+      updateLead(id, { priority: prev })
       toast('Failed to update temperature', 'error')
     } else {
       toast('Temperature updated')
     }
-  }, [lead?.priority, id, toast])
+  }, [lead?.priority, id, toast, updateLead])
 
   const handleAddNote = async () => {
     if (!note.trim()) return
