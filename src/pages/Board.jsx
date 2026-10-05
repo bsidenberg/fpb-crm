@@ -39,7 +39,7 @@ function StatCard({ label, value, sub, color }) {
 }
 
 export default function Board() {
-  const { leads, loading, refreshing, fetchLeads, handleDragStateChange } = useLeads()
+  const { leads, loading, refreshing, fetchLeads, updateLead, handleDragStateChange } = useLeads()
   // Show the full-screen spinner only on the very first load (no cached data yet).
   // On return navigation leads are already populated — render them immediately.
   const firstLoad = leads.length === 0 && loading
@@ -443,7 +443,7 @@ export default function Board() {
         <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', display: 'flex', minHeight: 0 }}>
           <KanbanBoard
             leads={annotatedLeads}
-            onLeadsChange={fetchLeads}
+            onLeadUpdate={updateLead}
             onAddLead={handleAddLead}
             onDragStateChange={handleDragStateChange}
             filterRadius={filterCenter ? filterRadius : null}
