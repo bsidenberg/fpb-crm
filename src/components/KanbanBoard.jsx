@@ -137,6 +137,16 @@ export default function KanbanBoard({ leads, onLeadUpdate, onAddLead, onDragStat
     toast(`Moved to ${stageName}`, 'success')
   }, [toast, onDragStateChange, onLeadUpdate])
 
+  // Escape (or a lost pointer) fires onDragCancel, not onDragEnd. Without this
+  // the drag gate stays closed and realtime changes queue up indefinitely.
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null)
+    onDragStateChange?.(false)
+  }, [onDragStateChange])
+
+  // Release the drag gate if the board unmounts mid-drag (e.g. navigation)
+  useEffect(() => () => onDragStateChange?.(false), [onDragStateChange])
+
   const activeCard = activeId
     ? Object.values(items).flat().find(l => l.id === activeId)
     : null
@@ -147,6 +157,7 @@ export default function KanbanBoard({ leads, onLeadUpdate, onAddLead, onDragStat
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <div style={{
         display: 'flex',

@@ -875,9 +875,13 @@ export default function LeadDetail() {
       Object.assign(payload, stageChangeFields(payload.stage))
     }
     const addrChanged = (form.address !== lead.address) || (form.city !== lead.city) || (form.zip !== lead.zip)
-    const { error } = await supabase.from('leads').update(payload).eq('id', id)
+    // .select() so a zero-row update (e.g. blocked by RLS) counts as a failure
+    const { data, error } = await supabase.from('leads').update(payload).eq('id', id).select()
     setSaving(false)
-    if (error) { toast('Save failed: ' + error.message, 'error'); return }
+    if (error || !data || data.length === 0) {
+      toast('Save failed: ' + (error ? error.message : 'not saved'), 'error')
+      return
+    }
     toast('Lead updated')
     setLead(prev => ({ ...prev, ...payload }))
     updateLead(id, payload)
@@ -903,10 +907,12 @@ export default function LeadDetail() {
     const prior   = pickFields(lead, updates)
     // Patch the shared leads list too, so the board shows the new column on return
     setLead(l => ({ ...l, ...updates }))
+    setForm(f => ({ ...f, ...updates }))
     updateLead(id, updates)
     const { data, error } = await supabase.from('leads').update(updates).eq('id', id).select()
     if (error || !data || data.length === 0) {
       setLead(l => ({ ...l, ...prior }))
+      setForm(f => ({ ...f, ...prior }))
       updateLead(id, prior)
       toast('Stage update failed — not saved', 'error')
     } else {
@@ -918,10 +924,12 @@ export default function LeadDetail() {
     setTempOpen(false)
     const prev = lead.priority
     setLead(l => ({ ...l, priority: newPriority }))
+    setForm(f => ({ ...f, priority: newPriority }))
     updateLead(id, { priority: newPriority })
-    const { error } = await supabase.from('leads').update({ priority: newPriority }).eq('id', id)
-    if (error) {
+    const { data, error } = await supabase.from('leads').update({ priority: newPriority }).eq('id', id).select()
+    if (error || !data || data.length === 0) {
       setLead(l => ({ ...l, priority: prev }))
+      setForm(f => ({ ...f, priority: prev }))
       updateLead(id, { priority: prev })
       toast('Failed to update temperature', 'error')
     } else {
@@ -1101,7 +1109,7 @@ export default function LeadDetail() {
                 </button>
               )}
               <button
-                onClick={() => setEditing(true)}
+                onClick={() => { setForm(leadFormState(lead)); setEditing(true) }}
                 style={{ padding: '7px 14px', borderRadius: 6, background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 12, cursor: 'pointer' }}
               >
                 Edit
@@ -1164,7 +1172,7 @@ export default function LeadDetail() {
               />
               {divider}
               <button
-                onClick={() => setEditing(true)}
+                onClick={() => { setForm(leadFormState(lead)); setEditing(true) }}
                 style={{
                   marginTop: 4,
                   padding: '9px 0',
