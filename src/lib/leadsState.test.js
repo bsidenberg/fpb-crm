@@ -49,10 +49,19 @@ test('applyLeadChanges: later UPDATE for the same lead wins', () => {
   assert.equal(next[0].stage, 'lost')
 })
 
-test('stageChangeFields sets stage and timestamp, never quote_sent_at', () => {
+test('stageChangeFields stamps quote_sent_at only for estimate_sent', () => {
   const now = '2026-10-05T12:00:00.000Z'
-  assert.deepEqual(stageChangeFields('estimate_sent', now), { stage: 'estimate_sent', stage_changed_at: now })
+  assert.deepEqual(stageChangeFields('estimate_sent', now), { stage: 'estimate_sent', stage_changed_at: now, quote_sent_at: now })
   assert.deepEqual(stageChangeFields('won', now), { stage: 'won', stage_changed_at: now })
+  assert.deepEqual(stageChangeFields('need_to_quote', now), { stage: 'need_to_quote', stage_changed_at: now })
+})
+
+test('rollback of an estimate_sent move restores the prior quote_sent_at', () => {
+  const original = lead('a', { stage: 'need_to_quote', stage_changed_at: 't0', quote_sent_at: null })
+  const changes = stageChangeFields('estimate_sent', 't1')
+  const prior = pickFields(original, changes)
+  assert.deepEqual(prior, { stage: 'need_to_quote', stage_changed_at: 't0', quote_sent_at: null })
+  assert.deepEqual(patchLead(patchLead([original], 'a', changes), 'a', prior)[0], original)
 })
 
 test('pickFields captures prior values for rollback, null for missing', () => {
