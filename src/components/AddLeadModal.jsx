@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { geocodeLead } from '../lib/geocode'
+import { stageChangeFields } from '../lib/leadsState'
 import { STAGES, LEAD_SOURCES, BARN_SIZES, TEMPERATURE, TAGS, ACTIVITY_TYPES } from '../lib/stages'
 
 function normalizeEmptyStrings(obj) {
@@ -111,6 +112,7 @@ export default function AddLeadModal({ open, onClose, onSaved, defaultStage }) {
     const { notes, ...rest } = form
     const payload = normalizeEmptyStrings({
       ...rest,
+      ...stageChangeFields(form.stage || 'new'),
       value: form.value ? Number(form.value) : null,
       follow_up_date: form.follow_up_date || null,
     })

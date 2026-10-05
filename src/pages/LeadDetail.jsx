@@ -873,6 +873,12 @@ export default function LeadDetail() {
     })
     if (payload.stage && payload.stage !== lead.stage) {
       Object.assign(payload, stageChangeFields(payload.stage))
+    } else {
+      // Stage untouched in this edit: never write back stage fields from the
+      // form snapshot, which may predate a board move or the follow-up bot.
+      delete payload.stage
+      delete payload.stage_changed_at
+      delete payload.quote_sent_at
     }
     const addrChanged = (form.address !== lead.address) || (form.city !== lead.city) || (form.zip !== lead.zip)
     // .select() so a zero-row update (e.g. blocked by RLS) counts as a failure

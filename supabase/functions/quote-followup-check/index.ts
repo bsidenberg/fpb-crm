@@ -16,6 +16,18 @@ interface Lead {
   quote_sent_at: string | null
 }
 
+// Lead fields come from web-form input — escape before putting them in HTML.
+function esc(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+// .in() filters go in the GET URL; chunk so long id lists can't exceed it.
+const ID_CHUNK = 100
+// PostgREST's default max rows per response.
+const ROW_CAP = 1000
+
 function formatValue(v: number | null): string {
   if (!v) return '—'
   return '$' + Number(v).toLocaleString()
@@ -25,17 +37,18 @@ function buildEmail(leads: Lead[]): string {
   const count = leads.length
 
   const rows = leads.map(lead => {
-    const name = `${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() || 'Unknown'
-    const url  = `${CRM_BASE}/leads/${lead.id}`
+    const name = esc(`${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() || 'Unknown')
+    const url  = `${CRM_BASE}/leads/${encodeURIComponent(lead.id)}`
+    const tel  = (lead.phone ?? '').replace(/[^\d+]/g, '')
     return `
     <tr>
       <td style="padding:10px 14px;border-left:3px solid #D97706;border-bottom:1px solid #F0EDEA;">
         <a href="${url}" style="font-weight:600;color:#1C1917;text-decoration:none;font-size:14px;">${name}</a>
-        <div style="margin-top:3px;font-size:12px;color:#6B7280;">${lead.city ?? '—'}</div>
+        <div style="margin-top:3px;font-size:12px;color:#6B7280;">${esc(lead.city ?? '—')}</div>
       </td>
       <td style="padding:10px 14px;border-bottom:1px solid #F0EDEA;font-size:13px;color:#374151;white-space:nowrap;">
         ${lead.phone
-          ? `<a href="tel:${lead.phone}" style="color:#374151;text-decoration:none;">${lead.phone}</a>`
+          ? `<a href="tel:${tel}" style="color:#374151;text-decoration:none;">${esc(lead.phone)}</a>`
           : '—'}
       </td>
       <td style="padding:10px 14px;border-bottom:1px solid #F0EDEA;font-size:13px;font-weight:600;color:#1C1917;white-space:nowrap;">
@@ -119,13 +132,23 @@ Deno.serve(async () => {
     // 2. Filter out any lead that has had activity in the last 24 hours
     const candidateIds = candidates.map((l: Lead) => l.id)
 
-    const { data: recentActivity } = await db
-      .from('activities')
-      .select('lead_id')
-      .in('lead_id', candidateIds)
-      .gt('created_at', cutoff)
-
-    const activeLeadIds = new Set((recentActivity ?? []).map((a: { lead_id: string }) => a.lead_id))
+    //    Fail CLOSED: if activity can't be read reliably, move nothing.
+    const activeLeadIds = new Set<string>()
+    for (let i = 0; i < candidateIds.length; i += ID_CHUNK) {
+      const chunk = candidateIds.slice(i, i + ID_CHUNK)
+      const { data: recentActivity, error: actFetchErr } = await db
+        .from('activities')
+        .select('lead_id')
+        .in('lead_id', chunk)
+        .gt('created_at', cutoff)
+        .limit(ROW_CAP)
+      if (actFetchErr) throw actFetchErr
+      // A full page may be truncated — some active leads could be missing.
+      if ((recentActivity ?? []).length >= ROW_CAP) {
+        throw new Error('activities result hit row cap; refusing to move leads')
+      }
+      for (const a of recentActivity ?? []) activeLeadIds.add(a.lead_id)
+    }
     const stale = candidates.filter((l: Lead) => !activeLeadIds.has(l.id))
 
     if (stale.length === 0) {
@@ -138,16 +161,21 @@ Deno.serve(async () => {
     // 3. Move each stale lead to Contacted - Waiting on Them and log an activity.
     //    Re-check the stage in the UPDATE so a lead someone moved in the
     //    meantime is not yanked back; only rows actually moved are reported.
-    const { data: movedRows, error: updateErr } = await db
-      .from('leads')
-      .update({ stage: 'contacted_waiting', stage_changed_at: new Date().toISOString() })
-      .in('id', stale.map((l: Lead) => l.id))
-      .eq('stage', 'estimate_sent')
-      .select('id')
+    //    Also re-check quote_sent_at: a lead re-quoted mid-run has a fresh stamp.
+    const staleAll = stale.map((l: Lead) => l.id)
+    const movedIds = new Set<string>()
+    for (let i = 0; i < staleAll.length; i += ID_CHUNK) {
+      const { data: movedRows, error: updateErr } = await db
+        .from('leads')
+        .update({ stage: 'contacted_waiting', stage_changed_at: new Date().toISOString() })
+        .in('id', staleAll.slice(i, i + ID_CHUNK))
+        .eq('stage', 'estimate_sent')
+        .lt('quote_sent_at', cutoff)
+        .select('id')
+      if (updateErr) throw updateErr
+      for (const r of movedRows ?? []) movedIds.add(r.id)
+    }
 
-    if (updateErr) throw updateErr
-
-    const movedIds = new Set((movedRows ?? []).map((r: { id: string }) => r.id))
     const moved = stale.filter((l: Lead) => movedIds.has(l.id))
     const staleIds = moved.map((l: Lead) => l.id)
 
@@ -166,7 +194,7 @@ Deno.serve(async () => {
     }))
 
     const { error: actErr } = await db.from('activities').insert(activityRows)
-    if (actErr) console.error('activity insert failed:', actErr)
+    if (actErr) console.error('activity insert failed (leads already moved):', actErr)
 
     // 4. Send ONE summary email (staff inbox only) via Resend
     const subject = `FPB CRM: ${moved.length} lead${moved.length !== 1 ? 's' : ''} auto-moved to Contacted - Waiting on Them`
@@ -193,7 +221,7 @@ Deno.serve(async () => {
     }
 
     return new Response(
-      JSON.stringify({ ok: true, moved: moved.length, ids: staleIds }),
+      JSON.stringify({ ok: true, moved: moved.length, ids: staleIds, activityLogged: !actErr }),
       { headers: { 'Content-Type': 'application/json' } },
     )
   } catch (err) {
