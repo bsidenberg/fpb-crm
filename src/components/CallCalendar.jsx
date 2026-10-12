@@ -27,9 +27,9 @@ function workingIntervals(member, date) {
 }
 
 function laneLabel(member) {
-  if (member.role === 'primary') return 'Primary'
-  if (member.role === 'backup') return 'Backup'
-  return 'Team'
+  const role = member.role === 'primary' ? 'Primary' : member.role === 'backup' ? 'Backup' : 'Team'
+  const name = String(member.display_name || '').split(' ')[0]
+  return name ? `${name} · ${role}` : role
 }
 
 export default function CallCalendar({ days, members, appointments, blocks, onSelect }) {
@@ -37,7 +37,7 @@ export default function CallCalendar({ days, members, appointments, blocks, onSe
   return (
     <div style={{ display: 'flex', minWidth: 720, border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden', background: 'var(--color-surface)' }}>
       <div style={{ width: 64, flexShrink: 0, borderRight: '1px solid var(--color-border)', background: 'var(--color-surface-2)' }}>
-        <div style={{ height: 52, borderBottom: '1px solid var(--color-border)' }} />
+        <div style={{ height: 36, borderBottom: '1px solid var(--color-border)' }} />
         {Array.from({ length: rows }, (_, i) => {
           const mins = START_MIN + i * 30
           const hour = Math.floor(mins / 60)
@@ -55,16 +55,9 @@ export default function CallCalendar({ days, members, appointments, blocks, onSe
       <div style={{ display: 'flex', flex: 1, minWidth: 0 }}>
         {days.map(day => (
           <div key={dayKey(day)} style={{ flex: 1, minWidth: 0, borderRight: '1px solid var(--color-border)' }}>
-            <div style={{ height: 52, borderBottom: '1px solid var(--color-border)', padding: '8px 8px 6px', background: 'var(--color-surface-2)' }}>
+            <div style={{ height: 36, borderBottom: '1px solid var(--color-border)', padding: '8px 8px 6px', background: 'var(--color-surface-2)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)' }}>
                 {new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, weekday: 'short', month: 'short', day: 'numeric' }).format(day)}
-              </div>
-              <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                {members.map(member => (
-                  <span key={member.id} style={{ fontSize: 9, fontWeight: 700, color: member.role === 'primary' ? '#1D4ED8' : '#B45309' }}>
-                    {(member.display_name || '').split(' ')[0]}
-                  </span>
-                ))}
               </div>
             </div>
             <div style={{ display: 'flex' }}>
@@ -91,7 +84,7 @@ function MemberLane({ day, member, appointments, blocks, onSelect, rows }) {
   const intervals = workingIntervals(member, day)
   return (
     <div style={{ position: 'relative', flex: 1, minWidth: 0, height: rows * PX, borderLeft: '1px solid var(--color-border-light)', background: '#F3F4F6' }}>
-      <div style={{ position: 'absolute', top: 2, left: 4, fontSize: 8, fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase', color: 'var(--color-text-3)' }}>
+      <div style={{ position: 'absolute', top: 2, left: 4, right: 2, zIndex: 1, fontSize: 9, fontWeight: 700, letterSpacing: '0.2px', textTransform: 'uppercase', color: member.role === 'primary' ? '#1D4ED8' : '#B45309', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {laneLabel(member)}
       </div>
       {intervals.map(([from, to]) => {
@@ -113,7 +106,7 @@ function MemberLane({ day, member, appointments, blocks, onSelect, rows }) {
             background: 'repeating-linear-gradient(135deg, #E5E7EB, #E5E7EB 4px, #F9FAFB 4px, #F9FAFB 8px)',
             border: '1px dashed #9CA3AF', borderRadius: 4, fontSize: 9, color: '#4B5563', padding: '2px 4px',
           }}>
-            Blocked
+            {block.reason || 'Blocked'}
           </div>
         )
       })}
