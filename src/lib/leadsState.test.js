@@ -49,6 +49,15 @@ test('applyLeadChanges: later UPDATE for the same lead wins', () => {
   assert.equal(next[0].stage, 'lost')
 })
 
+test('applyLeadChanges keeps a client-attached appointment across lead updates', () => {
+  const leads = [lead('a', { appointment: { id: 'appt', status: 'scheduled' } })]
+  const next = applyLeadChanges(leads, [
+    { eventType: 'UPDATE', new: { id: 'a', stage: 'won' } },
+  ])
+  assert.equal(next[0].stage, 'won')
+  assert.deepEqual(next[0].appointment, { id: 'appt', status: 'scheduled' })
+})
+
 test('stageChangeFields stamps quote_sent_at only for estimate_sent', () => {
   const now = '2026-10-05T12:00:00.000Z'
   assert.deepEqual(stageChangeFields('estimate_sent', now), { stage: 'estimate_sent', stage_changed_at: now, quote_sent_at: now })

@@ -2,6 +2,7 @@
 export const USER_NAMES = {
   'brian@floridapolebarn.com': 'Brian Sidenberg',
   'jeff@floridapolebarn.com': 'Jeff Hicks',
+  'mathew@floridapolebarn.com': 'Mathew',
   'michelle@floridapolebarn.com': 'Michelle Hoyt',
 }
 

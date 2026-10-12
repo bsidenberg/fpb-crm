@@ -13,6 +13,7 @@ test('canonical list has one label per channel and no capture methods', () => {
     'AI Search',
     'Email',
     'Cold Call',
+    'Booking Agent',
     'Other',
   ])
   for (const blocked of ['Website Form', 'Website Chat', 'Website', 'Organic Search', 'Facebook']) {
@@ -24,6 +25,8 @@ test('keeps an already canonical source, including a manual pick', () => {
   assert.equal(normalizeSource({ source: 'Referral', gclid: 'abc' }), 'Referral')
   assert.equal(normalizeSource({ source: 'Google Organic', gclid: 'abc' }), 'Google Organic')
   assert.equal(normalizeSource({ source: 'Cold Call' }), 'Cold Call')
+  assert.equal(normalizeSource({ source: 'Booking Agent', gclid: 'abc' }), 'Booking Agent')
+  assert.equal(normalizeSource('seald'), 'Booking Agent')
   assert.equal(normalizeSource({ source: 'Direct', referrer_url: 'https://google.com' }), 'Direct')
 })
 

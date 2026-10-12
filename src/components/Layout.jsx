@@ -62,6 +62,18 @@ const NAV = [
     ),
   },
   {
+    to: '/calendar',
+    exact: false,
+    label: 'Calls',
+    icon: (
+      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <path d="M16 2v4M8 2v4M3 10h18" />
+        <path d="M12 14v4M10 16h4" />
+      </svg>
+    ),
+  },
+  {
     to: '/followups',
     exact: false,
     label: 'Follow-Ups',

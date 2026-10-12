@@ -1,0 +1,6 @@
+# SEALD calls this function with an API key, not a Supabase user JWT.
+# Deploy with: supabase functions deploy booking --no-verify-jwt --project-ref flabvhdgqddbfitbqjqk
+# Do not redeploy quote-followup-check, daily-followup-digest, or geocode from this file.
+
+[functions.booking]
+verify_jwt = false

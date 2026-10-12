@@ -13,6 +13,7 @@ import NewProjectModal from '../components/NewProjectModal'
 import { geocodeLead } from '../lib/geocode'
 import { usePresence } from '../hooks/usePresence'
 import PresenceBanner from '../components/PresenceBanner'
+import BookedCallPanel from '../components/BookedCallPanel'
 
 const TEMP_MAP   = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
@@ -1175,6 +1176,10 @@ export default function LeadDetail() {
                 tempOpen={tempOpen}
                 setTempOpen={setTempOpen}
                 onTempSelect={handleTempSelect}
+              />
+              <BookedCallPanel
+                leadId={lead.id}
+                onChanged={(appointment) => updateLead(lead.id, { booked_call: true, appointment })}
               />
               {divider}
               <button

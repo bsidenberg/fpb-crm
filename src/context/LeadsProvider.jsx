@@ -1,10 +1,25 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { fetchAllLeads } from '../lib/fetchAllLeads'
+import { fetchAllLeads, fetchAllPages } from '../lib/fetchAllLeads'
+import { pickDisplayAppointment, sameAppointment } from '../lib/bookedCall'
 import { calculateScore } from '../utils/scoreLeads'
 import { patchLead, applyLeadChanges, createChangeBatcher } from '../lib/leadsState'
 
 const LeadsContext = createContext(null)
+
+function withAppointments(leads, rows) {
+  const byLead = new Map()
+  for (const row of rows || []) {
+    const list = byLead.get(row.lead_id) || []
+    list.push(row)
+    byLead.set(row.lead_id, list)
+  }
+  return leads.map(lead => {
+    const appointment = pickDisplayAppointment(byLead.get(lead.id) || []) || null
+    if (sameAppointment(lead.appointment, appointment)) return lead
+    return { ...lead, appointment }
+  })
+}
 
 export function useLeads() {
   const ctx = useContext(LeadsContext)
@@ -70,7 +85,20 @@ export function LeadsProvider({ children }) {
       return { ...lead, score }
     })
 
-    setLeads(leadsWithScores)
+    let appointmentRows = []
+    try {
+      appointmentRows = await fetchAllPages((from, to) =>
+        supabase
+          .from('appointments')
+          .select('id, lead_id, team_member_id, starts_at, ends_at, status, reschedule_count')
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+    } catch {
+      appointmentRows = []
+    }
+
+    setLeads(withAppointments(leadsWithScores, appointmentRows))
     setLoading(false)
     setRefreshing(false)
 
@@ -133,6 +161,31 @@ export function LeadsProvider({ children }) {
       supabase.removeChannel(channel)
     }
   }, [triggerFetch])
+
+  // Separate channel so a missing appointments publication cannot take down
+  // the leads subscription. The board still renders if the migration is not
+  // applied yet.
+  useEffect(() => {
+    let cancelled = false
+    const channel = supabase
+      .channel('board-appointments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => {
+        fetchAllPages((from, to) =>
+          supabase
+            .from('appointments')
+            .select('id, lead_id, team_member_id, starts_at, ends_at, status, reschedule_count')
+            .order('id', { ascending: true })
+            .range(from, to)
+        ).then(rows => {
+          if (!cancelled) setLeads(prev => withAppointments(prev, rows))
+        }).catch(() => {})
+      })
+      .subscribe()
+    return () => {
+      cancelled = true
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   const handleDragStateChange = useCallback((dragging) => {
     isDraggingRef.current = dragging

@@ -24,7 +24,9 @@ export function applyLeadChanges(leads, payloads, scoreFor = () => 0) {
       next = [...next, { ...p.new, score: scoreFor(p.new) }]
     } else if (p.eventType === 'UPDATE') {
       next = next.map(l =>
-        l.id === p.new.id ? { ...p.new, score: p.new.score ?? l.score } : l
+        l.id === p.new.id
+          ? { ...p.new, score: p.new.score ?? l.score, appointment: p.new.appointment ?? l.appointment }
+          : l
       )
     } else if (p.eventType === 'DELETE') {
       next = next.filter(l => l.id !== p.old.id)

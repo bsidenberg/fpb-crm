@@ -24,6 +24,7 @@ export const LEAD_SOURCES = [
   'AI Search',
   'Email',
   'Cold Call',
+  'Booking Agent',
   'Other',
 ]
 
@@ -151,6 +152,9 @@ const ALIASES = {
 
   'cold call': 'Cold Call',
   coldcall: 'Cold Call',
+
+  'booking agent': 'Booking Agent',
+  seald: 'Booking Agent',
 
   other: 'Other',
 }
