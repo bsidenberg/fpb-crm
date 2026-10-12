@@ -12,8 +12,18 @@ import Login from './pages/Login'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import Map from './pages/Map'
+import Calendar from './pages/Calendar'
+import BookingPreview from './pages/BookingPreview'
 
 export default function App() {
+  if (import.meta.env.DEV && window.location.pathname === '/__booking-preview') {
+    return <BookingPreview />
+  }
+
+  return <AuthenticatedApp />
+}
+
+function AuthenticatedApp() {
   const [session, setSession] = useState(undefined) // undefined = loading
 
   useEffect(() => {
@@ -64,6 +74,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LeadsProvider><Layout /></LeadsProvider>}>
             <Route index element={<Board />} />
+            <Route path="calendar" element={<Calendar />} />
             <Route path="leads/:id" element={<LeadDetail />} />
             <Route path="followups" element={<FollowUps />} />
             <Route path="projects" element={<Projects />} />

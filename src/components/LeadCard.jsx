@@ -6,6 +6,7 @@ import { TEMPERATURE } from '../lib/stages'
 import { normalizeSource } from '../lib/leadSource'
 import { getFollowUpStatus } from '../lib/followup'
 import { getScoreGrade } from '../utils/scoreLeads'
+import { bookedCallPresentation } from '../lib/bookedCall'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 
@@ -124,8 +125,13 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
   const isOverdue = followStatus === 'overdue'
   const isDueToday = followStatus === 'today'
 
-  const borderColor = isOverdue ? '#C0392B' : temp.color
-  const baseBoxShadow = isOverdue
+  const callView = bookedCallPresentation(lead.appointment)
+  const borderColor = callView ? callView.color : (isOverdue ? '#C0392B' : temp.color)
+  const cardBorder = callView ? `2px solid ${callView.color}` : '1px solid var(--color-border)'
+  const cardBg = callView ? callView.wash : 'var(--color-surface)'
+  const baseBoxShadow = callView
+    ? `0 0 0 1px ${callView.color}22, 0 2px 8px rgba(29,78,216,0.08)`
+    : isOverdue
     ? '0 0 0 1px rgba(192,39,45,0.2), 0 2px 8px rgba(192,39,45,0.1)'
     : '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)'
 
@@ -168,9 +174,9 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
       <div
         onClick={() => !isDragging && navigate(`/leads/${lead.id}`)}
         style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderLeft: `3px solid ${borderColor}`,
+          background: cardBg,
+          border: cardBorder,
+          borderLeft: `4px solid ${borderColor}`,
           borderRadius: 7,
           padding: '10px 11px 10px 10px',
           marginBottom: 6,
@@ -184,11 +190,11 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
           e.currentTarget.style.boxShadow = isOverdue
             ? '0 4px 12px rgba(0,0,0,0.1), 0 0 0 1px rgba(192,39,45,0.3)'
             : '0 4px 12px rgba(0,0,0,0.1)'
-          e.currentTarget.style.background = '#F9FAFB'
+          e.currentTarget.style.background = callView ? callView.wash : '#F9FAFB'
         }}
         onMouseLeave={e => {
           e.currentTarget.style.boxShadow = baseBoxShadow
-          e.currentTarget.style.background = 'var(--color-surface)'
+          e.currentTarget.style.background = cardBg
         }}
       >
         {/* Row 1: Name + score badge + temp badge */}
@@ -246,6 +252,25 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
             </div>
           </div>
         </div>
+
+        {callView && (
+          <div style={{
+            marginTop: 6,
+            background: '#FFFFFF',
+            border: `1px solid ${callView.color}`,
+            borderRadius: 4,
+            padding: '4px 6px',
+          }}>
+            <div style={{
+              fontSize: 9, fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase', color: callView.color,
+            }}>
+              {callView.label}
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)', marginTop: 1 }}>
+              {callView.when}
+            </div>
+          </div>
+        )}
 
         {/* Row 2: Overdue / due-today alert */}
         {(isOverdue || isDueToday) && (
@@ -388,6 +413,11 @@ function areLeadCardPropsEqual(prev, next) {
     a.last_contact_date === b.last_contact_date &&
     a._distance         === b._distance         &&
     a._inRadius         === b._inRadius         &&
+    (a.appointment?.id ?? null) === (b.appointment?.id ?? null) &&
+    (a.appointment?.status ?? null) === (b.appointment?.status ?? null) &&
+    (a.appointment?.starts_at ?? null) === (b.appointment?.starts_at ?? null) &&
+    (a.appointment?.ends_at ?? null) === (b.appointment?.ends_at ?? null) &&
+    (a.appointment?.reschedule_count ?? 0) === (b.appointment?.reschedule_count ?? 0) &&
     (a.tags === b.tags || (a.tags || []).join('\0') === (b.tags || []).join('\0'))
   )
 }
