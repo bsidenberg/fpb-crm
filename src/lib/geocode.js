@@ -3,10 +3,15 @@
  *
  * Calls /functions/v1/geocode instead of Google directly.
  * No Google API key in browser code — the edge function holds the server key.
+ * The request is authorized with the signed-in user's access token. The
+ * publishable key is sent only as `apikey`, which the gateway requires.
  *
  * Requires: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env
  * All functions return null on failure — never throw.
  */
+
+import { supabase } from './supabase'
+import { geocodeRequestHeaders } from './geocodeAuth'
 
 /**
  * geocodeAddress(addressString)
@@ -24,16 +29,22 @@ export async function geocodeAddress(addressString) {
 
   if (!addressString || !addressString.trim()) return null
 
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers = geocodeRequestHeaders({
+    accessToken: session?.access_token,
+    anonKey: supabaseAnon,
+  })
+  if (!headers) {
+    console.error('[geocode] Not signed in — refusing to call the edge function with the publishable key.')
+    return null
+  }
+
   const url = `${supabaseUrl}/functions/v1/geocode`
 
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${supabaseAnon}`,
-        'apikey':        supabaseAnon,
-      },
+      headers,
       body: JSON.stringify({ address: addressString }),
     })
 

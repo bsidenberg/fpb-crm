@@ -7,9 +7,10 @@
  *   npm run backfill-geocoding
  *
  * Reads from .env:
- *   VITE_SUPABASE_URL
- *   VITE_SUPABASE_ANON_KEY
- *   VITE_GOOGLE_MAPS_API_KEY
+ *   VITE_SUPABASE_URL (or SUPABASE_URL)
+ *   SUPABASE_SERVICE_ROLE_KEY  — required. The publishable/anon key cannot
+ *                                read or update leads after the RLS lockdown.
+ *   GOOGLE_MAPS_SERVER_KEY
  */
 
 import 'dotenv/config'
@@ -17,14 +18,15 @@ import { createClient } from '@supabase/supabase-js'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const SUPABASE_URL  = process.env.VITE_SUPABASE_URL
-const SUPABASE_KEY  = process.env.VITE_SUPABASE_ANON_KEY
+const SUPABASE_URL  = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
 const GOOGLE_KEY    = process.env.GOOGLE_MAPS_SERVER_KEY
 const DELAY_MS      = 100   // 10 req/sec — well under Google's 50/sec limit
 const GEOCODE_BASE  = 'https://maps.googleapis.com/maps/api/geocode/json'
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env')
+  console.error('Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env')
+  console.error('The publishable/anon key can no longer read leads. Do not fall back to it.')
   process.exit(1)
 }
 
