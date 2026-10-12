@@ -13,12 +13,27 @@ const GEOCODE_BASE = 'https://maps.googleapis.com/maps/api/geocode/json'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+const CRM_EMAIL = /@floridapolebarn\.com$/i
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
   if (req.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405)
+  }
+
+  // The publishable key is public and this function used to accept it.
+  // Cache reads and Google calls now require a signed-in CRM user.
+  // service_role is still what talks to geocode_cache below.
+  const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
+  if (!token || token === SUPABASE_SERVICE_ROLE_KEY) {
+    return json({ error: 'Unauthorized' }, 401)
+  }
+  const { data: userData, error: userErr } = await supabase.auth.getUser(token)
+  const email = userData?.user?.email ?? ''
+  if (userErr || !userData?.user || !CRM_EMAIL.test(email)) {
+    return json({ error: 'Unauthorized' }, 401)
   }
 
   if (!GOOGLE_MAPS_SERVER_KEY) return json({ error: 'Missing GOOGLE_MAPS_SERVER_KEY secret' }, 500)
