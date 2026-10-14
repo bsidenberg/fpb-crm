@@ -14,6 +14,8 @@ import { geocodeLead } from '../lib/geocode'
 import { usePresence } from '../hooks/usePresence'
 import PresenceBanner from '../components/PresenceBanner'
 import BookedCallPanel from '../components/BookedCallPanel'
+import { markBookedCallDone } from '../lib/markBookedCall'
+import { BOOKED_TILE } from '../lib/bookedCall'
 
 const TEMP_MAP   = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
@@ -786,6 +788,7 @@ export default function LeadDetail() {
   const [scoreData,       setScoreData]       = useState(null)
   const [tempOpen,        setTempOpen]        = useState(false)
   const [convertModalOpen, setConvertModalOpen] = useState(false)
+  const [markingCall, setMarkingCall] = useState(false)
 
   // Pre-fill author from logged-in user (only if field hasn't been manually edited)
   useEffect(() => {
@@ -943,6 +946,32 @@ export default function LeadDetail() {
       toast('Temperature updated')
     }
   }, [lead?.priority, id, toast, updateLead])
+
+  const handleMarkCallDone = async () => {
+    if (!lead?.booked_call || markingCall) return
+    const prior = true
+    setMarkingCall(true)
+    setLead(l => ({ ...l, booked_call: false }))
+    updateLead(id, { booked_call: false })
+    const result = await markBookedCallDone(supabase, {
+      leadId: id,
+      author: displayName,
+      userEmail,
+    })
+    setMarkingCall(false)
+    if (!result.ok) {
+      setLead(l => ({ ...l, booked_call: prior }))
+      updateLead(id, { booked_call: prior })
+      toast('Could not mark the call done', 'error')
+      return
+    }
+    if (result.activityError) {
+      toast('Tile cleared, but the activity was not saved', 'error')
+      return
+    }
+    toast('Call marked done')
+    fetchActivities()
+  }
 
   const handleAddNote = async () => {
     if (!note.trim()) return
@@ -1179,8 +1208,28 @@ export default function LeadDetail() {
               />
               <BookedCallPanel
                 leadId={lead.id}
-                onChanged={(appointment) => updateLead(lead.id, { booked_call: true, appointment })}
+                onChanged={(appointment) => updateLead(lead.id, { appointment })}
               />
+              {lead.booked_call && (
+                <button
+                  type="button"
+                  onClick={handleMarkCallDone}
+                  disabled={markingCall}
+                  style={{
+                    marginTop: 8,
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    border: `1px solid ${BOOKED_TILE.color}`,
+                    background: BOOKED_TILE.wash,
+                    color: BOOKED_TILE.color,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: markingCall ? 'wait' : 'pointer',
+                  }}
+                >
+                  {markingCall ? 'Saving…' : 'Mark call done'}
+                </button>
+              )}
               {divider}
               <button
                 onClick={() => { setForm(leadFormState(lead)); setEditing(true) }}
