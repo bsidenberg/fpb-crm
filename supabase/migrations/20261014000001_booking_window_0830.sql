@@ -4,10 +4,15 @@
 --
 -- Replaces the time check used by book_consultation, reschedule_consultation,
 -- and direct writes to booked calls (public.appointments). Does not edit
--- 20261012000002_booked_calls.sql.
+-- 20261012000002_booked_calls.sql or 20261012000005_return_booked_leads_to_new.sql.
+--
+-- book_consultation still calls apply_booking_lead_patch from
+-- 20261012000005_return_booked_leads_to_new.sql: a matched lead returns to stage 'new', booked_call is set true,
+-- lead_source is filled only when blank, and quote_sent_at is left alone.
 --
 -- DO NOT APPLY from CI. Run in the Supabase SQL editor after
--- 20261012000002_booked_calls.sql and 20261012000003_booking_agent_lead_source.sql.
+-- 20261012000002_booked_calls.sql, 20261012000003_booking_agent_lead_source.sql,
+-- and 20261012000005_return_booked_leads_to_new.sql.
 -- See docs/BOOKING_SETUP.md.
 
 create or replace function public.booking_slot_allowed(
@@ -286,25 +291,7 @@ begin
     )
     returning id into v_lead;
   else
-    update public.leads set
-      booked_call = true,
-      building_type = case when nullif(btrim(coalesce(building_type, '')), '') is null then coalesce(v_building, building_type) else building_type end,
-      barn_size = case when nullif(btrim(coalesce(barn_size, '')), '') is null then coalesce(v_size, barn_size) else barn_size end,
-      timeline = case when nullif(btrim(coalesce(timeline, '')), '') is null then coalesce(v_timeline, timeline) else timeline end,
-      city = case when nullif(btrim(coalesce(city, '')), '') is null then coalesce(v_city, city) else city end,
-      email = case when nullif(btrim(coalesce(email, '')), '') is null then coalesce(v_email, email) else email end,
-      phone = case when nullif(btrim(coalesce(phone, '')), '') is null then coalesce(nullif(v_phone, ''), phone) else phone end,
-      owner = case when nullif(btrim(coalesce(owner, '')), '') is null then coalesce(v_owner, owner) else owner end,
-      source = case when nullif(btrim(coalesce(source, '')), '') is null then 'Booking Agent' else source end,
-      lead_source = case when nullif(btrim(coalesce(lead_source, '')), '') is null then 'Booking Agent' else lead_source end,
-      notes = case
-        when coalesce(p_request->>'note_marker', '') <> ''
-          and position(p_request->>'note_marker' in coalesce(notes, '')) > 0 then notes
-        when v_note = '' then notes
-        when nullif(notes, '') is null then v_note
-        else notes || E'\n\n' || v_note
-      end
-    where id = v_lead;
+    perform public.apply_booking_lead_patch(v_lead, p_request, v_owner);
   end if;
 
   insert into public.appointments (

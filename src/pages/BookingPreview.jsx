@@ -54,6 +54,7 @@ function lead(partial) {
     follow_up_date: null,
     last_contact_date: null,
     tags: [],
+    booked_call: !!partial.booked_call,
     appointment: partial.appointment,
   }
 }
@@ -66,6 +67,7 @@ const samples = [
     city: 'Clermont',
     barn_size: '30x40',
     owner: 'Mathew',
+    booked_call: true,
     appointment: {
       id: 'a1', status: 'scheduled', reschedule_count: 0,
       starts_at: at(2, 14, 0), ends_at: at(2, 14, 30),
@@ -78,6 +80,7 @@ const samples = [
     city: 'Groveland',
     barn_size: '24x36',
     owner: 'Mathew',
+    booked_call: true,
     appointment: {
       id: 'a2', status: 'scheduled', reschedule_count: 1,
       starts_at: at(3, 10, 0), ends_at: at(3, 10, 30),

@@ -192,15 +192,18 @@ function blank(value) {
 }
 
 /**
- * Fields written onto a lead. Never includes stage, stage_changed_at, or
- * quote_sent_at. Does not overwrite a rep's existing kit/building fields.
- * consultation_call stays on the appointment, not leads.service_type.
+ * Fields written onto a lead. Every booking, including a match on an
+ * existing lead, sets stage to 'new' and booked_call. lead_source becomes
+ * Booking Agent only when it is blank. Never includes stage_changed_at or
+ * quote_sent_at (the database function stamps stage_changed_at when the
+ * stage actually changes). Does not overwrite a rep's existing kit/building
+ * fields. consultation_call stays on the appointment, not leads.service_type.
  */
 export function planLeadWrite(existing, parsed, { owner, whenLabel } = {}) {
   const note = intakeNote(parsed, whenLabel)
   const marker = noteMarker(parsed)
   const create = !existing
-  const patch = { booked_call: true }
+  const patch = { booked_call: true, stage: 'new' }
   const fill = (column, value) => {
     if (blank(value)) return
     if (create || blank(existing[column])) patch[column] = value
@@ -212,14 +215,11 @@ export function planLeadWrite(existing, parsed, { owner, whenLabel } = {}) {
   fill('email', parsed.customer.email)
   fill('phone', parsed.customer.phone)
   fill('owner', owner)
-  if (create || blank(existing.source)) {
-    patch.source = BOOKING_SOURCE
-    patch.lead_source = BOOKING_SOURCE
-  }
+  if (create || blank(existing.source)) patch.source = BOOKING_SOURCE
+  if (create || blank(existing.lead_source)) patch.lead_source = BOOKING_SOURCE
   if (create) {
     patch.first_name = parsed.customer.first_name
     patch.last_name = parsed.customer.last_name
-    patch.stage = 'new'
     patch.priority = 'warm'
     patch.notes = note
   } else {

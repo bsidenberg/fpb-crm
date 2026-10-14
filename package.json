@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test src/lib/leadSource.test.js src/lib/fetchAllLeads.test.js src/lib/leadsState.test.js src/lib/geocodeAuth.test.js src/lib/bookingSlots.test.js src/lib/bookedCall.test.js src/lib/sealdContract.test.js",
+    "test": "node --test src/lib/leadSource.test.js src/lib/fetchAllLeads.test.js src/lib/leadsState.test.js src/lib/geocodeAuth.test.js src/lib/bookingSlots.test.js src/lib/bookedCall.test.js src/lib/sealdContract.test.js src/lib/boardOrder.test.js",
     "preview": "vite preview",
     "deploy": "vercel --prod",
     "backfill-geocoding": "node scripts/backfill-geocoding.js"
