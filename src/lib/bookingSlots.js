@@ -1,5 +1,7 @@
 export {
   BUSINESS_TZ,
+  BOOKING_DAY_START_MIN,
+  BOOKING_DAY_END_MIN,
   DEFAULT_WEEKLY_HOURS,
   zonedParts,
   timeZoneOffsetMs,
@@ -8,6 +10,7 @@ export {
   formatWallClock,
   parseGraphDate,
   weekdayKey,
+  bookingStartAllowed,
   slotFitsWorkingHours,
   memberFreeForSlot,
   consultationMinutes,

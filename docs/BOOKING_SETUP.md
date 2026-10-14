@@ -37,7 +37,7 @@ Change role or `notify_all` on the Calls page (member chip → settings). The co
 ## Assumptions
 
 - Display name for mathew@ is **Mathew** only. No surname was confirmed. Brian is **Brian Sidenberg**, matching the existing CRM user list. Jeff Hicks and Michelle Hoyt stay CRM users and are not bookable.
-- Hours: Monday–Friday 9:30 AM–4:30 PM America/New_York. Calls are 30 minutes, so the last start is 4:00 PM. Seeded in `team_members.weekly_hours`. Editable per member.
+- Hours: Monday–Friday 8:30 AM–4:30 PM America/New_York. Calls are 30 minutes and start only on `:00` or `:30`, so the last start is 4:00 PM. A start before 8:30, at or after 4:30, on Saturday or Sunday, or at any other minute is rejected. Seeded in `team_members.weekly_hours`. Editable per member inside that window; the database still rejects anything outside it.
 - Buffer between calls is **0**. The Calls page can raise `buffer_minutes`. Buffer is applied after appointments and Outlook busy time, not after an explicit block. The database exclusion constraint stops raw overlaps only; `member_is_free` enforces the buffer.
 - Minimum notice is **60 minutes**. Configurable per member (`min_notice_minutes`).
 - Public slot length is the primary member’s `call_minutes` (30).
@@ -57,8 +57,13 @@ In the Supabase SQL editor for project `flabvhdgqddbfitbqjqk`, run in this order
 1. `supabase/migrations/20261012000002_booked_calls.sql`
 2. `supabase/migrations/20261012000003_booking_agent_lead_source.sql`
 3. `supabase/migrations/20261012000005_return_booked_leads_to_new.sql`
+4. `supabase/migrations/20261014000001_booking_window_0830.sql`
 
 Do **not** re-run `20260923000001_normalize_lead_source.sql` after step 2. The older file would replace `normalize_lead_channel` and drop the Booking Agent channel. Step 2 does not backfill existing leads.
+
+Step 3 returns a matched lead to stage `new`, sets `booked_call`, and leaves `quote_sent_at` alone. `lead_source` becomes Booking Agent only when it is blank.
+
+Step 4 is the booking window. If steps 1–3 are already applied, run only step 4. It moves team members who are still on Mon–Fri 09:30–16:30 to 08:30–16:30. The replaced `book_consultation` still calls `apply_booking_lead_patch`, so a matched lead returns to New Lead with `booked_call` true. `reschedule_consultation` and the `booked_calls_time_check` trigger reject a weekend, a start before 8:30 AM, a start at or after 4:30 PM, and any minute other than `:00` or `:30`. Do not edit `20261012000002_booked_calls.sql` or `20261012000005_return_booked_leads_to_new.sql`.
 
 Step 2’s file ends with `notify pgrst, 'reload schema'`. If the Calls page says the table is missing after a successful run, run that notify again.
 
@@ -176,15 +181,15 @@ x-api-key: <SEALD_API_KEY>
   "end": "2026-10-18T00:00:00-04:00",
   "slots": [
     {
-      "start": "2026-10-13T09:30:00-04:00",
-      "end": "2026-10-13T10:00:00-04:00",
+      "start": "2026-10-13T08:30:00-04:00",
+      "end": "2026-10-13T09:00:00-04:00",
       "available_count": 2
     }
   ]
 }
 ```
 
-`outlook` is `ok`, `not_configured`, or `unavailable`. Range must be at most 62 days. A weekday has 14 slots (9:30 through 16:00). Saturday and Sunday are closed.
+`outlook` is `ok`, `not_configured`, or `unavailable`. Range must be at most 62 days. A weekday has 16 slots (8:30 through 16:00). Saturday and Sunday are closed. `POST` and `PATCH` reject a start before 8:30, at or after 4:30, on a weekend, or on a minute other than `:00` or `:30`.
 
 ### POST /bookings
 
@@ -328,7 +333,7 @@ A lead with `booked_call` true uses a light indigo tile (background and left bor
 
 Database (after the manual SQL, not before):
 
-- [ ] `team_members` has Mathew (`primary`, `notify_all` false) and Brian Sidenberg (`backup`, `notify_all` true), Mon–Fri 09:30–16:30, 30-minute calls.
+- [ ] `team_members` has Mathew (`primary`, `notify_all` false) and Brian Sidenberg (`backup`, `notify_all` true), Mon–Fri 08:30–16:30, 30-minute calls.
 - [ ] Anon `select` on `appointments`, `team_members`, `team_blocks`, and `booking_webhook_events` returns no rows / permission denied.
 - [ ] A signed-in `@floridapolebarn.com` user can read them.
 - [ ] Booking the same instant twice for Mathew hits `slot_taken` or the exclusion constraint. The second customer is not given Mathew’s slot.
@@ -337,7 +342,7 @@ Database (after the manual SQL, not before):
 
 API (function deployed, key set, Microsoft secrets unset):
 
-- [ ] `GET /availability` for a weekday returns 14 slots and `assignment: "primary_then_backup"`. A Saturday–Sunday range returns no slots.
+- [ ] `GET /availability` for a weekday returns 16 slots (8:30 through 16:00) and `assignment: "primary_then_backup"`. A Saturday–Sunday range returns no slots. 8:30 and 4:00 are accepted. 4:30, 3:33, and Saturday are rejected.
 - [ ] `POST /bookings` assigns `mathew@floridapolebarn.com` and returns 201, `outlook.status: "skipped"`.
 - [ ] The same `Idempotency-Key` returns 200 and the same id.
 - [ ] Book Mathew into that slot directly in the CRM (or a second booking at the same start). The next `POST` for that start assigns `brian@floridapolebarn.com`.

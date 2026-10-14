@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
-import { BUSINESS_TZ, DEFAULT_WEEKLY_HOURS, orderCandidates, zonedParts, zonedTimeToUtc } from '../lib/bookingSlots'
+import { BOOKING_DAY_END_MIN, BOOKING_DAY_START_MIN, BUSINESS_TZ, DEFAULT_WEEKLY_HOURS, orderCandidates, zonedParts, zonedTimeToUtc } from '../lib/bookingSlots'
 import { formatCallWhen } from '../lib/bookedCall'
 import { cancelBooking, rescheduleBooking, setBookingOutcome, syncBookingOutlook } from '../lib/bookingClient'
 import CallCalendar from '../components/CallCalendar'
@@ -127,7 +127,7 @@ export default function Calendar() {
         <div>
           <div style={{ fontSize: 18, fontWeight: 750, letterSpacing: '-0.3px' }}>Booked calls</div>
           <div style={{ fontSize: 12, color: 'var(--color-text-3)', marginTop: 2 }}>
-            Eastern Time · Mathew takes the call when he is free · Brian is backup and notified on Outlook
+            Mon–Fri 8:30 AM–4:30 PM Eastern · 30-minute slots · Mathew takes the call when he is free · Brian is backup and notified on Outlook
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -160,6 +160,8 @@ export default function Calendar() {
             members={members.filter(member => member.active !== false)}
             appointments={appointments}
             blocks={blocks}
+            startMin={BOOKING_DAY_START_MIN}
+            endMin={BOOKING_DAY_END_MIN}
             onSelect={appt => { setSelected(appt); setRescheduleAt(toLocalInput(appt.starts_at)) }}
           />
         )}
@@ -288,7 +290,7 @@ function MemberSettings({ member, onClose, onSaved, blockForm, setBlockForm, blo
             <label style={lbl}>{key} hours</label>
             <input
               style={input}
-              placeholder="09:30-16:30"
+              placeholder="08:30-16:30"
               value={form.hours[key]}
               onChange={e => setForm({ ...form, hours: { ...form.hours, [key]: e.target.value } })}
             />

@@ -118,7 +118,10 @@ function rpcFailure(error: { message?: string, code?: string } | null) {
     return json({ error: 'not_scheduled', message: 'That booking can no longer be changed.' }, 409)
   }
   if (message.includes('invalid_time')) {
-    return json({ error: 'invalid_time', message: 'start and end must be a valid range.' }, 400)
+    return json({
+      error: 'invalid_time',
+      message: 'Bookings are Monday–Friday, 8:30 AM–4:30 PM Eastern, starting on :00 or :30. The last start is 4:00 PM.',
+    }, 400)
   }
   if (message.includes('invalid_status')) {
     return json({ error: 'invalid_status', message: 'Status must be completed or no_show.' }, 400)

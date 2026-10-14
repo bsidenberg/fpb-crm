@@ -2,15 +2,23 @@
 // Used by the CRM (via src/lib/bookingSlots.js) and the booking edge function.
 // Times are stored as UTC instants. Working hours are wall-clock in the
 // member's timezone (Florida Pole Barn uses America/New_York).
+// Bookable window: Mon–Fri 8:30 AM–4:30 PM. Slots are 30 minutes and may
+// start only on :00 or :30. The last start is 4:00 PM.
 
 export const BUSINESS_TZ = 'America/New_York'
 
+/** First bookable minute of the day (8:30). Calendar grid uses the same bound. */
+export const BOOKING_DAY_START_MIN = 8 * 60 + 30
+
+/** Close of the bookable day (4:30). A slot may end at this minute, not start. */
+export const BOOKING_DAY_END_MIN = 16 * 60 + 30
+
 export const DEFAULT_WEEKLY_HOURS = {
-  mon: [['09:30', '16:30']],
-  tue: [['09:30', '16:30']],
-  wed: [['09:30', '16:30']],
-  thu: [['09:30', '16:30']],
-  fri: [['09:30', '16:30']],
+  mon: [['08:30', '16:30']],
+  tue: [['08:30', '16:30']],
+  wed: [['08:30', '16:30']],
+  thu: [['08:30', '16:30']],
+  fri: [['08:30', '16:30']],
   sat: [],
   sun: [],
 }
@@ -98,6 +106,21 @@ export function weekdayKey(date, timeZone = BUSINESS_TZ) {
   return WEEKDAY_KEY[zonedParts(date, timeZone).weekday] || 'sun'
 }
 
+/**
+ * Hard window for a slot start, independent of a member's weekly_hours.
+ * Weekdays only, 8:30 AM inclusive through 4:30 PM exclusive, minute :00 or :30.
+ */
+export function bookingStartAllowed(date, timeZone = BUSINESS_TZ) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return false
+  const p = zonedParts(date, timeZone)
+  const key = WEEKDAY_KEY[p.weekday]
+  if (key !== 'mon' && key !== 'tue' && key !== 'wed' && key !== 'thu' && key !== 'fri') return false
+  if (p.second !== 0) return false
+  if (p.minute !== 0 && p.minute !== 30) return false
+  const mins = p.hour * 60 + p.minute
+  return mins >= BOOKING_DAY_START_MIN && mins < BOOKING_DAY_END_MIN
+}
+
 function parseHm(value) {
   const [h, m] = String(value || '').split(':').map(Number)
   if (!Number.isFinite(h) || !Number.isFinite(m)) return null
@@ -109,6 +132,12 @@ function rangesOverlap(aStart, aEnd, bStart, bEnd) {
 }
 
 export function slotFitsWorkingHours(member, slotStart, slotEnd) {
+  if (!bookingStartAllowed(slotStart, BUSINESS_TZ)) return false
+  const businessEnd = zonedParts(slotEnd, BUSINESS_TZ)
+  const businessStart = zonedParts(slotStart, BUSINESS_TZ)
+  if (businessStart.year !== businessEnd.year || businessStart.month !== businessEnd.month || businessStart.day !== businessEnd.day) return false
+  if (businessEnd.hour * 60 + businessEnd.minute > BOOKING_DAY_END_MIN) return false
+
   const tz = member.timezone || BUSINESS_TZ
   const start = zonedParts(slotStart, tz)
   const end = zonedParts(new Date(slotEnd.getTime() - 1), tz)
@@ -216,7 +245,9 @@ export function openSlots({
         const windowStart = zonedTimeToUtc(dayCursor.year, dayCursor.month, dayCursor.day, Math.floor(a / 60), a % 60, memberTz)
         const windowEnd = zonedTimeToUtc(dayCursor.year, dayCursor.month, dayCursor.day, Math.floor(b / 60), b % 60, memberTz)
         for (let t = windowStart.getTime(); t + durationMs <= windowEnd.getTime(); t += durationMs) {
-          if (t >= rangeStart.getTime() && t < rangeEnd.getTime()) startKeys.add(t)
+          if (t < rangeStart.getTime() || t >= rangeEnd.getTime()) continue
+          if (!bookingStartAllowed(new Date(t), BUSINESS_TZ)) continue
+          startKeys.add(t)
         }
       }
     }

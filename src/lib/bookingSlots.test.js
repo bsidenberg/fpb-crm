@@ -6,6 +6,7 @@ import {
   openSlots,
   pickAssignee,
   outlookAttendees,
+  slotFitsWorkingHours,
   DEFAULT_WEEKLY_HOURS,
 } from './bookingSlots.js'
 
@@ -48,7 +49,7 @@ test('9:30 AM ET is UTC-4 in October and UTC-5 in December', () => {
   assert.equal(formatOffsetIso(dec), '2026-12-15T09:30:00-05:00')
 })
 
-test('a weekday offers 14 half-hour slots from 9:30 to 4:00 when either member is free', () => {
+test('a weekday offers 16 half-hour slots from 8:30 to 4:00 when either member is free', () => {
   const rangeStart = zonedTimeToUtc(2026, 10, 13, 0, 0)
   const rangeEnd = zonedTimeToUtc(2026, 10, 14, 0, 0)
   const { slotMinutes, slots } = openSlots({
@@ -58,15 +59,54 @@ test('a weekday offers 14 half-hour slots from 9:30 to 4:00 when either member i
     now: zonedTimeToUtc(2026, 10, 1, 9, 0),
   })
   assert.equal(slotMinutes, 30)
-  assert.equal(slots.length, 14)
-  assert.equal(formatOffsetIso(slots[0].start), '2026-10-13T09:30:00-04:00')
-  assert.equal(formatOffsetIso(slots[0].end), '2026-10-13T10:00:00-04:00')
-  assert.equal(formatOffsetIso(slots[13].start), '2026-10-13T16:00:00-04:00')
+  assert.equal(slots.length, 16)
+  assert.equal(formatOffsetIso(slots[0].start), '2026-10-13T08:30:00-04:00')
+  assert.equal(formatOffsetIso(slots[0].end), '2026-10-13T09:00:00-04:00')
+  assert.equal(formatOffsetIso(slots[15].start), '2026-10-13T16:00:00-04:00')
   assert.equal(slots[0].available_count, 2)
   assert.equal(slots.every(s => s.available_count === 2), true)
 })
 
-test('weekends and times outside 9:30–4:30 are closed', () => {
+function thirtyMinuteSlot(year, month, day, hour, minute) {
+  const start = zonedTimeToUtc(year, month, day, hour, minute)
+  return { start, end: new Date(start.getTime() + 30 * 60 * 1000) }
+}
+
+test('8:30 and 4:00 are bookable; 4:30, 3:33, and Saturday are rejected', () => {
+  const tuesday = mathew
+  const at830 = thirtyMinuteSlot(2026, 10, 13, 8, 30)
+  const at400 = thirtyMinuteSlot(2026, 10, 13, 16, 0)
+  const at430 = thirtyMinuteSlot(2026, 10, 13, 16, 30)
+  const at333 = thirtyMinuteSlot(2026, 10, 13, 15, 33)
+  const saturday = thirtyMinuteSlot(2026, 10, 17, 8, 30)
+  assert.equal(slotFitsWorkingHours(tuesday, at830.start, at830.end), true)
+  assert.equal(slotFitsWorkingHours(tuesday, at400.start, at400.end), true)
+  assert.equal(slotFitsWorkingHours(tuesday, at430.start, at430.end), false)
+  assert.equal(slotFitsWorkingHours(tuesday, at333.start, at333.end), false)
+  assert.equal(slotFitsWorkingHours(tuesday, saturday.start, saturday.end), false)
+
+  const openSaturday = member({
+    ...mathew,
+    weekly_hours: { ...hours, sat: [['08:30', '16:30']] },
+  })
+  assert.equal(slotFitsWorkingHours(openSaturday, saturday.start, saturday.end), false)
+
+  const rangeStart = zonedTimeToUtc(2026, 10, 13, 0, 0)
+  const rangeEnd = zonedTimeToUtc(2026, 10, 14, 0, 0)
+  const { slots } = openSlots({
+    members: [mathew],
+    rangeStart,
+    rangeEnd,
+    now: zonedTimeToUtc(2026, 10, 1, 8, 0),
+  })
+  const labels = slots.map(s => formatOffsetIso(s.start))
+  assert.equal(labels.includes('2026-10-13T08:30:00-04:00'), true)
+  assert.equal(labels.includes('2026-10-13T16:00:00-04:00'), true)
+  assert.equal(labels.includes('2026-10-13T16:30:00-04:00'), false)
+  assert.equal(labels.some(label => label.includes('T15:33')), false)
+})
+
+test('weekends and times outside 8:30–4:30 are closed', () => {
   const rangeStart = zonedTimeToUtc(2026, 10, 17, 0, 0) // Saturday
   const rangeEnd = zonedTimeToUtc(2026, 10, 19, 0, 0) // Monday
   const { slots } = openSlots({
