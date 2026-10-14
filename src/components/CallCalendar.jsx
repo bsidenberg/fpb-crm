@@ -1,8 +1,6 @@
 import { bookedCallPresentation } from '../lib/bookedCall'
-import { BUSINESS_TZ, zonedParts, DEFAULT_WEEKLY_HOURS } from '../lib/bookingSlots'
+import { BOOKING_DAY_END_MIN, BOOKING_DAY_START_MIN, BUSINESS_TZ, zonedParts, DEFAULT_WEEKLY_HOURS } from '../lib/bookingSlots'
 
-const START_MIN = 9 * 60
-const END_MIN = 17 * 60
 const PX = 36
 
 function dayKey(date) {
@@ -32,19 +30,27 @@ function laneLabel(member) {
   return name ? `${name} · ${role}` : role
 }
 
-export default function CallCalendar({ days, members, appointments, blocks, onSelect }) {
-  const rows = (END_MIN - START_MIN) / 30
+export default function CallCalendar({
+  days,
+  members,
+  appointments,
+  blocks,
+  onSelect,
+  startMin = BOOKING_DAY_START_MIN,
+  endMin = BOOKING_DAY_END_MIN,
+}) {
+  const rows = (endMin - startMin) / 30
   return (
     <div style={{ display: 'flex', minWidth: 720, border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden', background: 'var(--color-surface)' }}>
       <div style={{ width: 64, flexShrink: 0, borderRight: '1px solid var(--color-border)', background: 'var(--color-surface-2)' }}>
         <div style={{ height: 36, borderBottom: '1px solid var(--color-border)' }} />
         {Array.from({ length: rows }, (_, i) => {
-          const mins = START_MIN + i * 30
+          const mins = startMin + i * 30
           const hour = Math.floor(mins / 60)
           const minute = mins % 60
           const label = minute === 0
             ? `${((hour + 11) % 12) + 1}${hour < 12 ? 'a' : 'p'}`
-            : ''
+            : (i === 0 ? `${((hour + 11) % 12) + 1}:30${hour < 12 ? 'a' : 'p'}` : '')
           return (
             <div key={mins} style={{ height: PX, padding: '2px 6px 0', fontSize: 10, color: 'var(--color-text-3)', textAlign: 'right' }}>
               {label}
@@ -70,6 +76,7 @@ export default function CallCalendar({ days, members, appointments, blocks, onSe
                   blocks={blocks.filter(block => block.team_member_id === member.id && sameDay(new Date(block.starts_at), day))}
                   onSelect={onSelect}
                   rows={rows}
+                  startMin={startMin}
                 />
               ))}
             </div>
@@ -80,7 +87,7 @@ export default function CallCalendar({ days, members, appointments, blocks, onSe
   )
 }
 
-function MemberLane({ day, member, appointments, blocks, onSelect, rows }) {
+function MemberLane({ day, member, appointments, blocks, onSelect, rows, startMin }) {
   const intervals = workingIntervals(member, day)
   return (
     <div style={{ position: 'relative', flex: 1, minWidth: 0, height: rows * PX, borderLeft: '1px solid var(--color-border-light)', background: '#F3F4F6' }}>
@@ -90,7 +97,7 @@ function MemberLane({ day, member, appointments, blocks, onSelect, rows }) {
       {intervals.map(([from, to]) => {
         const [fh, fm] = from.split(':').map(Number)
         const [th, tm] = to.split(':').map(Number)
-        const top = ((fh * 60 + fm - START_MIN) / 30) * PX
+        const top = ((fh * 60 + fm - startMin) / 30) * PX
         const height = (((th * 60 + tm) - (fh * 60 + fm)) / 30) * PX
         return <div key={`${from}-${to}`} style={{ position: 'absolute', left: 0, right: 0, top, height, background: '#FFFFFF' }} />
       })}
@@ -98,7 +105,7 @@ function MemberLane({ day, member, appointments, blocks, onSelect, rows }) {
         <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * PX, height: PX, borderTop: '1px solid rgba(209,213,219,0.7)' }} />
       ))}
       {blocks.map(block => {
-        const top = ((minutesOf(new Date(block.starts_at)) - START_MIN) / 30) * PX
+        const top = ((minutesOf(new Date(block.starts_at)) - startMin) / 30) * PX
         const height = Math.max(18, ((minutesOf(new Date(block.ends_at)) - minutesOf(new Date(block.starts_at))) / 30) * PX)
         return (
           <div key={block.id} title={block.reason || 'Blocked'} style={{
@@ -112,7 +119,7 @@ function MemberLane({ day, member, appointments, blocks, onSelect, rows }) {
       })}
       {appointments.map(appt => {
         const view = bookedCallPresentation(appt) || { color: '#1D4ED8', wash: '#EFF6FF', label: 'Call' }
-        const top = ((minutesOf(new Date(appt.starts_at)) - START_MIN) / 30) * PX
+        const top = ((minutesOf(new Date(appt.starts_at)) - startMin) / 30) * PX
         const height = Math.max(PX - 4, ((minutesOf(new Date(appt.ends_at)) - minutesOf(new Date(appt.starts_at))) / 30) * PX - 2)
         return (
           <button
