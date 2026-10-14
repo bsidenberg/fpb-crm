@@ -10,23 +10,22 @@ import { STAGES } from '../lib/stages'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { stageChangeFields, pickFields } from '../lib/leadsState'
+import { compareColumnLeads } from '../lib/boardOrder'
 import KanbanColumn from './KanbanColumn'
 import LeadCard from './LeadCard'
 
-// Each column is sorted by stage_changed_at ASC (oldest at top).
-// For leads with null stage_changed_at, created_at is used as fallback.
+// Booked calls sit at the top (latest appointment, then updated time).
+// Other cards stay in stage_changed_at order, oldest at the top.
+// For leads with null stage_changed_at, created_at is the fallback.
 // To backfill existing leads in Supabase:
 //   UPDATE leads SET stage_changed_at = created_at WHERE stage_changed_at IS NULL;
-function columnSortKey(lead) {
-  return new Date(lead.stage_changed_at || lead.created_at || 0).getTime()
-}
 
 function buildItems(leads) {
   const items = {}
   for (const stage of STAGES) {
     items[stage.id] = leads
       .filter(l => l.stage === stage.id)
-      .sort((a, b) => columnSortKey(a) - columnSortKey(b))
+      .sort(compareColumnLeads)
   }
   return items
 }
@@ -112,7 +111,7 @@ export default function KanbanBoard({ leads, onLeadUpdate, onAddLead, onDragStat
       ...itemsRef.current,
       [sourceStage]: itemsRef.current[sourceStage].filter(l => l.id !== leadId),
       [targetStage]: [...itemsRef.current[targetStage], updatedLead]
-        .sort((a, b) => columnSortKey(a) - columnSortKey(b)),
+        .sort(compareColumnLeads),
     }
     itemsRef.current = newItems
     setItems(newItems)

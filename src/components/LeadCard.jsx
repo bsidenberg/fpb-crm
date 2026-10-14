@@ -6,9 +6,12 @@ import { TEMPERATURE } from '../lib/stages'
 import { normalizeSource } from '../lib/leadSource'
 import { getFollowUpStatus } from '../lib/followup'
 import { getScoreGrade } from '../utils/scoreLeads'
-import { bookedCallPresentation } from '../lib/bookedCall'
+import { bookedCallPresentation, BOOKED_TILE } from '../lib/bookedCall'
+import { markBookedCallDone } from '../lib/markBookedCall'
+import { getDisplayName } from '../lib/users'
 import { supabase } from '../lib/supabase'
 import { useToast } from '../lib/toast'
+import { useLeads } from '../context/LeadsProvider'
 
 const TEMP_MAP = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 
@@ -106,6 +109,7 @@ function ProbabilityBadge({ value }) {
 function LeadCard({ lead, overlay = false, activeId = null }) {
   const navigate = useNavigate()
   const toast = useToast()
+  const updateLead = useLeads({ optional: true })?.updateLead
   const { attributes, listeners, setNodeRef } = useDraggable({ id: lead.id })
   // Derive dragging state from the prop so freshly-mounted virtual instances
   // (scrolled back into view mid-drag) render correctly without useDraggable's
@@ -114,6 +118,13 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
 
   const [localPriority, setLocalPriority] = useState(lead.priority || 'warm')
   const [tempOpen, setTempOpen] = useState(false)
+  const [booked, setBooked] = useState(!!lead.booked_call)
+  const [seenBooked, setSeenBooked] = useState(lead.booked_call)
+  const [markingCall, setMarkingCall] = useState(false)
+  if (lead.booked_call !== seenBooked) {
+    setSeenBooked(lead.booked_call)
+    setBooked(!!lead.booked_call)
+  }
 
   useEffect(() => {
     setLocalPriority(lead.priority || 'warm')
@@ -126,11 +137,11 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
   const isDueToday = followStatus === 'today'
 
   const callView = bookedCallPresentation(lead.appointment)
-  const borderColor = callView ? callView.color : (isOverdue ? '#C0392B' : temp.color)
-  const cardBorder = callView ? `2px solid ${callView.color}` : '1px solid var(--color-border)'
-  const cardBg = callView ? callView.wash : 'var(--color-surface)'
-  const baseBoxShadow = callView
-    ? `0 0 0 1px ${callView.color}22, 0 2px 8px rgba(29,78,216,0.08)`
+  const borderColor = booked ? BOOKED_TILE.color : (isOverdue ? '#C0392B' : temp.color)
+  const cardBorder = booked ? `1px solid ${BOOKED_TILE.line}` : '1px solid var(--color-border)'
+  const cardBg = booked ? BOOKED_TILE.wash : 'var(--color-surface)'
+  const baseBoxShadow = booked
+    ? `0 0 0 1px ${BOOKED_TILE.color}22, 0 2px 8px rgba(67,56,202,0.1)`
     : isOverdue
     ? '0 0 0 1px rgba(192,39,45,0.2), 0 2px 8px rgba(192,39,45,0.1)'
     : '0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04)'
@@ -156,6 +167,41 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
       toast('Temperature updated')
     }
   }, [lead.id, localPriority, toast])
+
+  const handleMarkCallDone = useCallback(async (event) => {
+    event.stopPropagation()
+    event.preventDefault()
+    if (markingCall || !booked) return
+    setMarkingCall(true)
+    setBooked(false)
+    updateLead?.(lead.id, { booked_call: false })
+    try {
+      const { data } = await supabase.auth.getUser()
+      const user = data?.user
+      const result = await markBookedCallDone(supabase, {
+        leadId: lead.id,
+        author: getDisplayName(user?.email),
+        userEmail: user?.email || null,
+      })
+      setMarkingCall(false)
+      if (!result.ok) {
+        setBooked(true)
+        updateLead?.(lead.id, { booked_call: true })
+        toast('Could not mark the call done', 'error')
+        return
+      }
+      if (result.activityError) {
+        toast('Tile cleared, but the activity was not saved', 'error')
+        return
+      }
+      toast('Call marked done')
+    } catch {
+      setMarkingCall(false)
+      setBooked(true)
+      updateLead?.(lead.id, { booked_call: true })
+      toast('Could not mark the call done', 'error')
+    }
+  }, [booked, lead.id, markingCall, toast, updateLead])
 
   // Format last_contact_date safely
   let lastContactDisplay = '—'
@@ -190,7 +236,7 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
           e.currentTarget.style.boxShadow = isOverdue
             ? '0 4px 12px rgba(0,0,0,0.1), 0 0 0 1px rgba(192,39,45,0.3)'
             : '0 4px 12px rgba(0,0,0,0.1)'
-          e.currentTarget.style.background = callView ? callView.wash : '#F9FAFB'
+          e.currentTarget.style.background = booked ? '#E0E7FF' : '#F9FAFB'
         }}
         onMouseLeave={e => {
           e.currentTarget.style.boxShadow = baseBoxShadow
@@ -253,22 +299,47 @@ function LeadCard({ lead, overlay = false, activeId = null }) {
           </div>
         </div>
 
-        {callView && (
+        {(booked || callView) && (
           <div style={{
             marginTop: 6,
             background: '#FFFFFF',
-            border: `1px solid ${callView.color}`,
+            border: `1px solid ${booked ? BOOKED_TILE.color : callView.color}`,
             borderRadius: 4,
             padding: '4px 6px',
           }}>
             <div style={{
-              fontSize: 9, fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase', color: callView.color,
+              fontSize: 9, fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase',
+              color: booked ? BOOKED_TILE.color : callView.color,
             }}>
-              {callView.label}
+              {callView?.label || 'Booked call'}
             </div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)', marginTop: 1 }}>
-              {callView.when}
-            </div>
+            {callView?.when && (
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)', marginTop: 1 }}>
+                {callView.when}
+              </div>
+            )}
+            {booked && !String(lead.id).startsWith('preview-') && (
+              <button
+                type="button"
+                disabled={markingCall}
+                onPointerDown={e => e.stopPropagation()}
+                onClick={handleMarkCallDone}
+                style={{
+                  marginTop: 6,
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  border: `1px solid ${BOOKED_TILE.color}`,
+                  background: BOOKED_TILE.wash,
+                  color: BOOKED_TILE.color,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.2px',
+                  cursor: markingCall ? 'wait' : 'pointer',
+                }}
+              >
+                {markingCall ? 'Saving…' : 'Mark call done'}
+              </button>
+            )}
           </div>
         )}
 
@@ -411,6 +482,7 @@ function areLeadCardPropsEqual(prev, next) {
     a.referrer_url      === b.referrer_url      &&
     a.follow_up_date    === b.follow_up_date    &&
     a.last_contact_date === b.last_contact_date &&
+    !!a.booked_call     === !!b.booked_call     &&
     a._distance         === b._distance         &&
     a._inRadius         === b._inRadius         &&
     (a.appointment?.id ?? null) === (b.appointment?.id ?? null) &&

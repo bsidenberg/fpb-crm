@@ -21,9 +21,9 @@ function withAppointments(leads, rows) {
   })
 }
 
-export function useLeads() {
+export function useLeads({ optional = false } = {}) {
   const ctx = useContext(LeadsContext)
-  if (!ctx) throw new Error('useLeads must be used within LeadsProvider')
+  if (!ctx && !optional) throw new Error('useLeads must be used within LeadsProvider')
   return ctx
 }
 

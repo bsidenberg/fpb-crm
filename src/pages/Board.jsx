@@ -4,6 +4,7 @@ import { getFollowUpStatus } from '../lib/followup'
 import { geocodeAddress } from '../lib/geocode'
 import { useLeads } from '../context/LeadsProvider'
 import { filterLeadsByRadius } from '../lib/haversine'
+import { BOOKED_TILE } from '../lib/bookedCall'
 import KanbanBoard from '../components/KanbanBoard'
 import AddLeadModal from '../components/AddLeadModal'
 import ImportModal from '../components/ImportModal'
@@ -74,6 +75,7 @@ export default function Board() {
   const [sortBy,        setSortBy]        = useState(() => _p.get('sort')    || 'score_desc')
   const [serviceType,   setServiceType]   = useState(() => _p.get('svc')     || 'all')
   const [buildingType,  setBuildingType]  = useState(() => _p.get('bld')     || 'all')
+  const [bookedOnly,    setBookedOnly]    = useState(() => _p.get('booked') === '1')
 
   // Keep URL in sync whenever any filter changes
   useEffect(() => {
@@ -85,6 +87,7 @@ export default function Board() {
     if (sortBy !== 'score_desc')  p.set('sort',     sortBy)
     if (serviceType !== 'all')    p.set('svc',      serviceType)
     if (buildingType !== 'all')   p.set('bld',      buildingType)
+    if (bookedOnly)               p.set('booked',   '1')
     if (filterCenter) {
       p.set('dist_addr', filterCenter.address)
       p.set('dist_lat',  String(filterCenter.lat))
@@ -93,11 +96,11 @@ export default function Board() {
     }
     const qs = p.toString()
     window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
-  }, [search, filterStage, filterTemp, filterFollowUp, sortBy, serviceType, buildingType, filterCenter, filterRadius])
+  }, [search, filterStage, filterTemp, filterFollowUp, sortBy, serviceType, buildingType, bookedOnly, filterCenter, filterRadius])
 
   // Full filter → sort → distance-annotate pipeline.
   // serviceFiltered is exposed alongside annotatedLeads so KPIs share the same memo.
-  // Recomputes only when one of these 10 inputs changes — not on modalOpen, importOpen, etc.
+  // Recomputes only when a filter input changes — not on modalOpen, importOpen, etc.
   const { annotatedLeads, serviceFiltered } = useMemo(() => {
     const serviceFiltered = leads.filter(l => {
       if (serviceType === 'kit')      { if (l.service_type  !== 'Kit Delivery Only')  return false }
@@ -114,6 +117,7 @@ export default function Board() {
       if (filterFollowUp) {
         if (getFollowUpStatus(l.follow_up_date) !== filterFollowUp) return false
       }
+      if (bookedOnly && !l.booked_call) return false
       if (search) {
         const q = search.toLowerCase()
         const match = [l.first_name, l.last_name, l.email, l.phone, l.company, l.city]
@@ -135,7 +139,7 @@ export default function Board() {
       : sorted.map(l => ({ ...l, _distance: null, _inRadius: null }))
 
     return { annotatedLeads, serviceFiltered }
-  }, [leads, serviceType, buildingType, filterStage, filterTemp, filterFollowUp, search, sortBy, filterCenter, filterRadius])
+  }, [leads, serviceType, buildingType, filterStage, filterTemp, filterFollowUp, bookedOnly, search, sortBy, filterCenter, filterRadius])
 
   const matchCount = filterCenter
     ? annotatedLeads.filter(l => l._distance != null && l._distance <= filterRadius).length
@@ -167,6 +171,8 @@ export default function Board() {
 
   // Win rate: won / (won + lost) * 100 — 0% when no closed leads
   const winRate = closedCount > 0 ? Math.round((wonLeads.length / closedCount) * 100) : 0
+
+  const bookedCount = serviceFiltered.filter(l => l.booked_call).length
 
   const overdueCount = serviceFiltered.filter(l => {
     if (!l.follow_up_date || l.stage === 'won' || l.stage === 'lost') return false
@@ -402,6 +408,23 @@ export default function Board() {
             <option value="upcoming">Upcoming (7d){followUpCounts.upcoming > 0 ? ` (${followUpCounts.upcoming})` : ''}</option>
           </select>
 
+          <button
+            type="button"
+            onClick={() => setBookedOnly(v => !v)}
+            style={{
+              padding: '6px 10px',
+              background: bookedOnly ? BOOKED_TILE.wash : 'var(--surface-2)',
+              border: `1px solid ${bookedOnly ? BOOKED_TILE.color : 'var(--border)'}`,
+              borderRadius: 6,
+              color: bookedOnly ? BOOKED_TILE.color : 'var(--text-muted)',
+              fontSize: 12,
+              fontWeight: bookedOnly ? 700 : 500,
+              cursor: 'pointer',
+            }}
+          >
+            Booked call{bookedCount > 0 ? ` (${bookedCount})` : ''}
+          </button>
+
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value)}
@@ -419,9 +442,9 @@ export default function Board() {
             <option value="newest">Newest First</option>
           </select>
 
-          {(search || filterStage || filterTemp || filterFollowUp) && (
+          {(search || filterStage || filterTemp || filterFollowUp || bookedOnly) && (
             <button
-              onClick={() => { setSearch(''); setFilterStage(''); setFilterTemp(''); setFilterFollowUp('') }}
+              onClick={() => { setSearch(''); setFilterStage(''); setFilterTemp(''); setFilterFollowUp(''); setBookedOnly(false) }}
               style={{
                 padding: '6px 10px', background: 'transparent',
                 border: '1px solid var(--border)', borderRadius: 6,

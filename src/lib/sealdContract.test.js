@@ -52,7 +52,7 @@ test('webhook and booking bodies normalize to the same customer and intake', () 
   assert.equal(statusFromEvent({ ...parsed, eventType: 'booking.updated' }), 'rescheduled')
 })
 
-test('lead writes flag the booked call, fill empty intake fields, and leave stage and quote_sent_at alone', () => {
+test('lead writes flag the booked call, fill empty intake fields, and return every lead to new', () => {
   const parsed = normalizeBookingBody({
     signed_record_id: 'sig_9',
     customer: { name: 'Sam', email: 'sam@example.com', phone: '3525550100' },
@@ -86,15 +86,30 @@ test('lead writes flag the booked call, fill empty intake fields, and leave stag
     quote_sent_at: '2026-10-01T12:00:00.000Z',
   }, parsed, { owner: 'Mathew' })
   assert.equal(existing.source, undefined)
+  assert.equal(existing.lead_source, 'Booking Agent')
   assert.equal(existing.building_type, undefined)
   assert.equal(existing.barn_size, undefined)
   assert.equal(existing.city, undefined)
   assert.equal(existing.timeline, 'Just Looking')
-  assert.equal(existing.stage, undefined)
-  assert.equal(existing.quote_sent_at, undefined)
+  assert.equal(existing.stage, 'new')
+  assert.equal(existing.booked_call, true)
+  assert.equal(Object.hasOwn(existing, 'quote_sent_at'), false)
+  assert.equal(Object.hasOwn(existing, 'stage_changed_at'), false)
   assert.match(existing.notes, /Spoke yesterday/)
   assert.match(existing.notes, /\[booked-call:sig_9\]/)
 
-  const again = planLeadWrite({ notes: existing.notes, source: 'Google Ads' }, parsed, { owner: 'Mathew' })
+  const kept = planLeadWrite({
+    source: 'Google Ads',
+    lead_source: 'Referral',
+    stage: 'won',
+    notes: 'Spoke yesterday',
+  }, parsed, { owner: 'Mathew' })
+  assert.equal(kept.source, undefined)
+  assert.equal(kept.lead_source, undefined)
+  assert.equal(kept.stage, 'new')
+
+  const again = planLeadWrite({ notes: existing.notes, source: 'Google Ads', lead_source: 'Google Ads' }, parsed, { owner: 'Mathew' })
   assert.equal(again.notes, undefined)
+  assert.equal(again.lead_source, undefined)
+  assert.equal(again.stage, 'new')
 })

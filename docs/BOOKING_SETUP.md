@@ -42,7 +42,7 @@ Change role or `notify_all` on the Calls page (member chip → settings). The co
 - Minimum notice is **60 minutes**. Configurable per member (`min_notice_minutes`).
 - Public slot length is the primary member’s `call_minutes` (30).
 - `consultation_call` is stored on the appointment. It is **not** written to `leads.service_type` (that column stays Kit Delivery Only / Kit + Installation).
-- New leads are stage `new`, priority `warm`, source **Booking Agent**. Linking a lead never writes `stage`, `stage_changed_at`, or `quote_sent_at`.
+- New leads are stage `new`, priority `warm`, source **Booking Agent**. Linking an existing lead (any stage, including won and lost) sets `stage` to `new` and `booked_call` true. `lead_source` becomes **Booking Agent** only when it is blank. `quote_sent_at` is not changed. `stage_changed_at` updates only when the stage actually changes.
 - Header names below are the defaults. Override them with the secrets in the next section if SEALD settles on different names.
 - Signed payload default is `{timestamp}.{body}` (unix timestamp string, a dot, then the raw request body).
 - If Microsoft secrets are missing, the booking still succeeds and `outlook.status` is `skipped` (`microsoft_not_configured`).
@@ -56,6 +56,7 @@ In the Supabase SQL editor for project `flabvhdgqddbfitbqjqk`, run in this order
 
 1. `supabase/migrations/20261012000002_booked_calls.sql`
 2. `supabase/migrations/20261012000003_booking_agent_lead_source.sql`
+3. `supabase/migrations/20261012000005_return_booked_leads_to_new.sql`
 
 Do **not** re-run `20260923000001_normalize_lead_source.sql` after step 2. The older file would replace `normalize_lead_channel` and drop the Booking Agent channel. Step 2 does not backfill existing leads.
 
@@ -315,13 +316,13 @@ No API key. Rejected with `401` when the timestamp is missing, not a number/ISO 
 
 `type` may be `booking.created`, `booking.updated`, `booking.rescheduled`, or `booking.cancelled` (also `booking.canceled`). `status` `completed` or `no_show` records the outcome. `event_id` is stored in `booking_webhook_events`. A repeat of the same `event_id` returns `{ "ok": true, "duplicate": true }` and does not book again.
 
-Find order when the webhook is an update or cancel: `booking_id`, then `idempotency_key`, then `signed_record_id`, then the single scheduled appointment for that customer email. Created events use `idempotency_key`, else `signed_record_id`, else `event_id`, as the idempotency key. Intake is appended to lead notes once, marked `[booked-call:…]`. Blank building type, size, timeline, city, email, phone, owner, and source are filled; values a rep already entered are left alone.
+Find order when the webhook is an update or cancel: `booking_id`, then `idempotency_key`, then `signed_record_id`, then the single scheduled appointment for that customer email. Created events use `idempotency_key`, else `signed_record_id`, else `event_id`, as the idempotency key. Intake is appended to lead notes once, marked `[booked-call:…]`. Blank building type, size, timeline, city, email, phone, owner, and source are filled; values a rep already entered are left alone. A matched lead is moved to stage `new` with `booked_call` true. `lead_source` is set to Booking Agent only when that field is empty.
 
 SEALD should retry with backoff on 5xx. 401 will not succeed on retry unless the signature or clock is fixed.
 
 ## What the board shows
 
-While a scheduled call is in the future the tile has a blue border and **Call booked** plus the Eastern time. After a reschedule the badge is **Rescheduled**. A scheduled call whose end has passed is **Outcome needed**. Completed is green, no-show is red, cancelled is gray. The tile uses the soonest upcoming scheduled call when a lead has more than one. The Calls page is the day/week calendar, working hours, blocks, role, and `notify_all`.
+A lead with `booked_call` true uses a light indigo tile (background and left border) and sorts to the top of its column, ahead of older cards. The badge still reads **Call booked**, **Rescheduled**, or **Outcome needed**, plus the Eastern time. **Mark call done** on the card or the lead page sets `booked_call` false, returns the tile to the normal color, and logs a call activity. Completed, no-show, and cancelled badges can remain after that. The board’s **Booked call** filter shows only flagged leads. The tile uses the soonest upcoming scheduled call when a lead has more than one. The Calls page is the day/week calendar, working hours, blocks, role, and `notify_all`.
 
 ## Test checklist
 
@@ -331,7 +332,7 @@ Database (after the manual SQL, not before):
 - [ ] Anon `select` on `appointments`, `team_members`, `team_blocks`, and `booking_webhook_events` returns no rows / permission denied.
 - [ ] A signed-in `@floridapolebarn.com` user can read them.
 - [ ] Booking the same instant twice for Mathew hits `slot_taken` or the exclusion constraint. The second customer is not given Mathew’s slot.
-- [ ] A lead linked by email does not change `stage` or `quote_sent_at`.
+- [ ] A lead linked by email moves to stage `new`, sets `booked_call`, keeps `quote_sent_at`, and keeps a `lead_source` that is already filled.
 - [ ] `leads.service_type` is unchanged. `appointments.service_type` is `consultation_call`.
 
 API (function deployed, key set, Microsoft secrets unset):
@@ -357,7 +358,7 @@ Outlook (after Azure consent and the three secrets):
 
 CRM UI (after the web app deploy):
 
-- [ ] Pipeline tiles show Call booked / Rescheduled / Outcome needed / Completed / No-show without moving the stage.
+- [ ] A booked lead lands in New Lead with the indigo tile, at the top of that column. Mark call done clears the color and adds an activity. The Booked call filter shows only those leads.
 - [ ] Calls page shows both lanes, a block, and a booking. Changing role or `notify_all` saves.
 - [ ] Complete, no-show, cancel, and reschedule from the lead and from the calendar.
 - [ ] Quote follow-up and the existing board still behave as before. Do not invoke `quote-followup-check` as a test; it emails people.
