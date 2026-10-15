@@ -26,6 +26,8 @@ function KanbanColumn({ stage, leads, onAddLead, filterRadius, activeId }) {
     <div style={{
       minWidth: 260,
       width: 260,
+      height: '100%',
+      minHeight: 0,
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
@@ -84,6 +86,7 @@ function KanbanColumn({ stage, leads, onAddLead, filterRadius, activeId }) {
           and the virtualizer's getScrollElement must point at this same DOM node. */}
       <div
         ref={el => { setNodeRef(el); scrollRef.current = el }}
+        className="app-scroll"
         style={{
           flex: 1,
           padding: '8px 8px 4px',

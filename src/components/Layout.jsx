@@ -126,7 +126,7 @@ export default function Layout() {
   const { displayName, email, signOut } = useAuth()
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: 'var(--color-bg)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', minHeight: 0, background: 'var(--color-bg)', overflow: 'hidden' }}>
       {/* Sidebar */}
       <aside style={{
         width: 220,
@@ -270,7 +270,7 @@ export default function Layout() {
       </aside>
 
       {/* Main */}
-      <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
         <Outlet />
       </main>
     </div>

@@ -103,7 +103,7 @@ export default function Projects() {
   }, [])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
 
       {/* Header */}
       <div style={{
@@ -144,7 +144,7 @@ export default function Projects() {
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+      <div className="app-scroll" style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', minHeight: 0 }}>
 
         {/* Error banner */}
         {error && (

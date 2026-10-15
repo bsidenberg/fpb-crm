@@ -57,6 +57,11 @@
 
 * { box-sizing: border-box; }
 
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   background: var(--color-bg);
@@ -73,6 +78,60 @@ input, select, textarea, button {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-border-light); }
+
+/* Reserve the vertical scrollbar so route changes and growing lists
+   don't shift the page sideways. */
+.app-scroll {
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+/* Wide views (pipeline, calendar, follow-ups) scroll sideways in a
+   viewport-sized pane. The native horizontal bar is removed in
+   Chrome/Edge/Safari and replaced by .desk-bar, which stays at the
+   bottom of that pane and stays visible (overlay scrollbars hide). */
+.pinned-h-scroll {
+  overscroll-behavior-x: contain;
+}
+
+.desk-bar {
+  display: none;
+}
+
+@supports selector(::-webkit-scrollbar) {
+  .pinned-h-scroll::-webkit-scrollbar {
+    height: 0;
+  }
+
+  .desk-bar {
+    display: block;
+    height: 18px;
+    flex-shrink: 0;
+    overflow-x: scroll;
+    overflow-y: hidden;
+    background: #d1d5db;
+    scrollbar-gutter: auto;
+  }
+
+  .desk-bar::-webkit-scrollbar {
+    -webkit-appearance: none;
+    height: 18px;
+  }
+
+  .desk-bar::-webkit-scrollbar-track {
+    background: #d1d5db;
+  }
+
+  .desk-bar::-webkit-scrollbar-thumb {
+    background: #1a2444;
+    border-radius: 9px;
+    border: 3px solid #d1d5db;
+  }
+
+  .desk-bar::-webkit-scrollbar-thumb:hover {
+    background: #c0272d;
+  }
+}
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }

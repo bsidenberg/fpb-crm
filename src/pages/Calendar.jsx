@@ -6,6 +6,7 @@ import { BOOKING_DAY_END_MIN, BOOKING_DAY_START_MIN, BUSINESS_TZ, DEFAULT_WEEKLY
 import { formatCallWhen } from '../lib/bookedCall'
 import { cancelBooking, rescheduleBooking, setBookingOutcome, syncBookingOutlook } from '../lib/bookingClient'
 import CallCalendar from '../components/CallCalendar'
+import PinnedHScroll from '../components/PinnedHScroll'
 import { shiftAnchor, weekDays } from '../lib/calendarRange'
 
 const HOURS = DEFAULT_WEEKLY_HOURS
@@ -122,7 +123,7 @@ export default function Calendar() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 750, letterSpacing: '-0.3px' }}>Booked calls</div>
@@ -149,7 +150,7 @@ export default function Calendar() {
         ))}
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '0 20px 20px' }}>
+      <PinnedHScroll scrollY contentStyle={{ padding: '0 20px 12px' }}>
         {error ? (
           <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: 16, fontSize: 13, maxWidth: 640 }}>
             The calendar tables are not available yet. Apply <code>supabase/migrations/20261012000002_booked_calls.sql</code> in the Supabase SQL editor. {error}
@@ -165,7 +166,7 @@ export default function Calendar() {
             onSelect={appt => { setSelected(appt); setRescheduleAt(toLocalInput(appt.starts_at)) }}
           />
         )}
-      </div>
+      </PinnedHScroll>
 
       {selected && (
         <Drawer title={selected.lead_name || selected.customer_name || 'Consultation'} onClose={() => setSelected(null)}>

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { getFollowUpStatus } from '../lib/followup'
 import { STAGES, TEMPERATURE, ACTIVITY_TYPES } from '../lib/stages'
 import { getScoreGrade } from '../utils/scoreLeads'
+import PinnedHScroll from '../components/PinnedHScroll'
 
 const STAGE_MAP = Object.fromEntries(STAGES.map(s => [s.id, s]))
 const TEMP_MAP  = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
@@ -158,7 +159,7 @@ export default function FollowUps() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
       {/* Header */}
       <div style={{
         padding: '16px 20px 12px',
@@ -213,7 +214,7 @@ export default function FollowUps() {
       </div>
 
       {/* Table */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto' }}>
+      <PinnedHScroll scrollY>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: 'var(--color-text-3)', fontSize: 14 }}>
             Loading follow-ups...
@@ -330,7 +331,7 @@ export default function FollowUps() {
             </tbody>
           </table>
         )}
-      </div>
+      </PinnedHScroll>
     </div>
   )
 }

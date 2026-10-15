@@ -180,7 +180,7 @@ export default function Board() {
   }).length
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
       {/* Header */}
       <div style={{
         padding: '16px 20px 0',
@@ -463,7 +463,7 @@ export default function Board() {
           Loading pipeline...
         </div>
       ) : (
-        <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', display: 'flex', minHeight: 0 }}>
+        <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <KanbanBoard
             leads={annotatedLeads}
             onLeadUpdate={updateLead}

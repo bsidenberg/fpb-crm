@@ -13,6 +13,7 @@ import { stageChangeFields, pickFields } from '../lib/leadsState'
 import { compareColumnLeads } from '../lib/boardOrder'
 import KanbanColumn from './KanbanColumn'
 import LeadCard from './LeadCard'
+import PinnedHScroll from './PinnedHScroll'
 
 // Booked calls sit at the top (latest appointment, then updated time).
 // Other cards stay in stage_changed_at order, oldest at the top.
@@ -158,26 +159,28 @@ export default function KanbanBoard({ leads, onLeadUpdate, onAddLead, onDragStat
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div style={{
-        display: 'flex',
-        gap: 12,
-        padding: '16px 20px 20px',
-        overflowX: 'auto',
-        flex: 1,
-        alignItems: 'stretch',
-        minHeight: 0,
-      }}>
-        {STAGES.map(stage => (
-          <KanbanColumn
-            key={stage.id}
-            stage={stage}
-            leads={items[stage.id] || []}
-            onAddLead={onAddLead}
-            filterRadius={filterRadius}
-            activeId={activeId}
-          />
-        ))}
-      </div>
+      <PinnedHScroll>
+        <div style={{
+          display: 'flex',
+          gap: 12,
+          padding: '16px 20px 12px',
+          height: '100%',
+          width: 'max-content',
+          minWidth: '100%',
+          alignItems: 'stretch',
+        }}>
+          {STAGES.map(stage => (
+            <KanbanColumn
+              key={stage.id}
+              stage={stage}
+              leads={items[stage.id] || []}
+              onAddLead={onAddLead}
+              filterRadius={filterRadius}
+              activeId={activeId}
+            />
+          ))}
+        </div>
+      </PinnedHScroll>
 
       <DragOverlay>
         {activeCard ? <LeadCard lead={activeCard} overlay /> : null}
