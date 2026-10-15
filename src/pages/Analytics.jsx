@@ -282,7 +282,7 @@ export default function Analytics() {
   const chartAxisStyle = { fontSize: 11, fill: '#9CA3AF', fontFamily: 'Inter, sans-serif' }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
       {/* Header */}
       <div style={{
         padding: '16px 24px',
@@ -322,7 +322,7 @@ export default function Analytics() {
       </div>
 
       {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+      <div className="app-scroll" style={{ flex: 1, overflowY: 'auto', padding: 24, minHeight: 0 }}>
 
         {/* ── Top stats row ──────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>

@@ -1041,7 +1041,7 @@ export default function LeadDetail() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
 
       {/* ── Sticky Header ─────────────────────────────────────────────────── */}
       <div style={{
@@ -1165,7 +1165,7 @@ export default function LeadDetail() {
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
 
         {/* LEFT — compact info (30%) */}
-        <div style={{
+        <div className="app-scroll" style={{
           width: '30%',
           flexShrink: 0,
           borderRight: '1px solid var(--color-border)',
@@ -1276,7 +1276,7 @@ export default function LeadDetail() {
         />
 
         {/* RIGHT — activity timeline (70%) */}
-        <div style={{
+        <div className="app-scroll" style={{
           flex: 1,
           overflowY: 'auto',
           background: '#F3F4F6',
