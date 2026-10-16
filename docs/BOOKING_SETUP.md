@@ -375,3 +375,12 @@ npm test
 npm run lint
 npm run build
 ```
+
+## SEALD webhook (final contract, S-35)
+
+Receiver: `POST https://flabvhdgqddbfitbqjqk.supabase.co/functions/v1/booking/webhooks/seald`
+
+- `Seald-Signature: t=<unix seconds>,v1=<hex hmac-sha256>` over `${t}.${rawBody}` (exact raw bytes), constant-time compare, |now − t| ≤ 300 s. Otherwise 401.
+- `Seald-Idempotency-Key` = event id. Processed events are stored in `booking_webhook_events` with `response_status`/`response_body` (migration `20261012000004`); retries return the original result with `duplicate: true`.
+- Payload `v` must be `1` (else 400). Events: `booking.created`, `booking.updated`, `booking.cancelled`. `"test": true` events are verified and return 200 without creating anything.
+- Secret: Supabase secret `SEALD_WEBHOOK_SECRET` = the secret SEALD returns once from `PUT /api/entities/:id/webhook`. The old `SEALD_WEBHOOK_*_HEADER` / `SIGNED_PAYLOAD` env overrides are no longer used.
