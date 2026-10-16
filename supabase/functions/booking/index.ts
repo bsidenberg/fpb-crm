@@ -231,10 +231,25 @@ async function candidateIdsFor(
   }
 }
 
+// Times without Z or an offset are wall-clock America/New_York (safety net for naive payloads).
+function parseBusinessTime(raw: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/.exec(raw.trim())
+  if (!m) return new Date(raw)
+  const [y, mo, d, h, mi, se] = m.slice(1).map(v => Number(v || 0))
+  const guess = Date.UTC(y, mo - 1, d, h, mi, se)
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(guess))
+  const g = (t: string) => Number(parts.find(p => p.type === t)?.value)
+  const asNy = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second'))
+  return new Date(guess + (guess - asNy))
+}
+
 function resolveRange(startRaw: string, endRaw: string, minutes: number) {
-  const start = new Date(startRaw)
+  const start = parseBusinessTime(startRaw)
   if (Number.isNaN(start.getTime())) return { error: json({ error: 'invalid_start', message: 'start must be ISO 8601.' }, 400) }
-  const end = endRaw ? new Date(endRaw) : new Date(start.getTime() + minutes * 60 * 1000)
+  const end = endRaw ? parseBusinessTime(endRaw) : new Date(start.getTime() + minutes * 60 * 1000)
   if (Number.isNaN(end.getTime()) || end <= start) {
     return { error: json({ error: 'invalid_end', message: 'end must be after start.' }, 400) }
   }
