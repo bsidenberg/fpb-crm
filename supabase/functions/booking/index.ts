@@ -33,6 +33,10 @@ import {
   signedPayload,
   statusFromEvent,
   timestampSkewError,
+  SEALD_IDEMPOTENCY_HEADER,
+  SEALD_PAYLOAD_VERSION,
+  SEALD_SIGNATURE_HEADER,
+  verifySealdSignature,
 } from '../_shared/sealdContract.js'
 import {
   createEvent,
@@ -51,7 +55,7 @@ const MAX_BODY = 65_536
 const corsHeaders: Record<string, string> = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'access-control-allow-headers': 'authorization, content-type, apikey, x-api-key, x-client-info, idempotency-key, x-seald-signature, x-seald-timestamp',
+  'access-control-allow-headers': 'authorization, content-type, apikey, x-api-key, x-client-info, idempotency-key, seald-signature, seald-idempotency-key',
 }
 
 function json(body: unknown, status = 200) {
@@ -605,13 +609,23 @@ async function findForChange(db: SupabaseClient, parsed: ReturnType<typeof norma
   return null
 }
 
-async function recordEvent(db: SupabaseClient, parsed: ReturnType<typeof normalizeBookingBody>, raw: unknown, appointmentId: string | null) {
-  const { error } = await db.from('booking_webhook_events').insert({
+async function recordEvent(
+  db: SupabaseClient,
+  parsed: ReturnType<typeof normalizeBookingBody>,
+  raw: unknown,
+  appointmentId: string | null,
+  status = 200,
+  body: unknown = null,
+) {
+  const row = {
     event_id: parsed.eventId,
     event_type: parsed.eventType || 'booking.created',
     appointment_id: appointmentId,
     payload: raw,
-  })
+  }
+  let { error } = await db.from('booking_webhook_events').insert({ ...row, response_status: status, response_body: body })
+  // Until migration 20261012000004 is applied, the response columns do not exist.
+  if (error && error.code === 'PGRST204') ({ error } = await db.from('booking_webhook_events').insert(row))
   if (error && error.code !== '23505') console.error('webhook event log failed', error.message)
 }
 
@@ -620,15 +634,9 @@ async function handleWebhook(req: Request, db: SupabaseClient) {
   if (!secret) return json({ error: 'webhook_secret_not_configured' }, 503)
   const raw = await req.text()
   if (raw.length > MAX_BODY) return json({ error: 'payload_too_large' }, 413)
-  const tsHeader = Deno.env.get('SEALD_WEBHOOK_TIMESTAMP_HEADER') || DEFAULT_TIMESTAMP_HEADER
-  const sigHeader = Deno.env.get('SEALD_WEBHOOK_SIGNATURE_HEADER') || DEFAULT_SIGNATURE_HEADER
-  const template = Deno.env.get('SEALD_WEBHOOK_SIGNED_PAYLOAD') || DEFAULT_SIGNED_TEMPLATE
-  const timestamp = headerLookup(req.headers, tsHeader)
-  const skew = timestampSkewError(timestamp, Date.now())
-  if (skew) return json({ error: skew }, 401)
-  const presented = parseSignatureHeader(headerLookup(req.headers, sigHeader))
-  const expected = await hmacSha256Hex(secret, signedPayload(template, timestamp, raw))
-  if (!presented || !safeEqual(presented, expected)) return json({ error: 'invalid_signature' }, 401)
+  // Seald-Signature: t=<unix>,v1=<hex hmac-sha256 of `${t}.${rawBody}`>; 300 s tolerance.
+  const sigError = await verifySealdSignature(raw, headerLookup(req.headers, SEALD_SIGNATURE_HEADER), secret, Date.now())
+  if (sigError) return json({ error: sigError }, 401)
 
   let payload: unknown
   try {
@@ -637,11 +645,29 @@ async function handleWebhook(req: Request, db: SupabaseClient) {
     return json({ error: 'invalid_json' }, 400)
   }
   const parsed = normalizeBookingBody(payload)
-  if (!parsed.eventId) return json({ error: 'event_id_required' }, 400)
+  if (parsed.version !== SEALD_PAYLOAD_VERSION) return json({ error: 'unsupported_version', v: parsed.version }, 400)
+  // Seald-Idempotency-Key is the event id and is stable across retries.
+  const key = headerLookup(req.headers, SEALD_IDEMPOTENCY_HEADER) || parsed.eventId
+  if (!key) return json({ error: 'event_id_required' }, 400)
+  parsed.eventId = key
   if (!parsed.eventType) parsed.eventType = 'booking.created'
+  if (!['booking.created', 'booking.updated', 'booking.cancelled', 'booking.canceled'].includes(parsed.eventType)) {
+    return json({ ok: true, ignored: true, reason: 'unknown_event_type', type: parsed.eventType })
+  }
+  // Test-sends are verified but never create a lead, appointment, or log row.
+  if (parsed.test) return json({ ok: true, test: true, ignored: true, event_id: key })
 
-  const seen = await db.from('booking_webhook_events').select('event_id, appointment_id').eq('event_id', parsed.eventId).maybeSingle()
+  let seen = await db.from('booking_webhook_events')
+    .select('event_id, appointment_id, response_status, response_body')
+    .eq('event_id', key).maybeSingle()
+  if (seen.error) {
+    seen = await db.from('booking_webhook_events').select('event_id, appointment_id').eq('event_id', key).maybeSingle()
+  }
   if (seen.data) {
+    const prior = seen.data.response_body as Record<string, unknown> | null
+    if (prior && typeof prior === 'object') {
+      return json({ ...prior, duplicate: true }, Number(seen.data.response_status) || 200)
+    }
     return json({ ok: true, duplicate: true, appointment_id: seen.data.appointment_id })
   }
 
@@ -652,7 +678,7 @@ async function handleWebhook(req: Request, db: SupabaseClient) {
   if (kind === 'cancelled') {
     const found = await findForChange(db, parsed)
     if (!found) {
-      await recordEvent(db, parsed, payload, null)
+      await recordEvent(db, parsed, payload, null, 200, { ok: true, matched: false })
       return json({ ok: true, matched: false })
     }
     const cancelled = await handleCancel(db, found)
@@ -662,7 +688,7 @@ async function handleWebhook(req: Request, db: SupabaseClient) {
   } else if (kind === 'completed' || kind === 'no_show') {
     const found = await findForChange(db, parsed)
     if (!found) {
-      await recordEvent(db, parsed, payload, null)
+      await recordEvent(db, parsed, payload, null, 200, { ok: true, matched: false })
       return json({ ok: true, matched: false })
     }
     const { data, error } = await db.rpc('set_consultation_outcome', { p_id: found, p_status: kind })
@@ -704,6 +730,6 @@ async function handleWebhook(req: Request, db: SupabaseClient) {
     resultBody = { ok: true, booking }
   }
 
-  await recordEvent(db, parsed, payload, appointmentId)
+  await recordEvent(db, parsed, payload, appointmentId, 200, resultBody)
   return json(resultBody)
 }

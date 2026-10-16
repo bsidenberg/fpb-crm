@@ -1,0 +1,49 @@
+{
+  "v": 1,
+  "id": "evt_fsc_consult_created_example",
+  "type": "booking.created",
+  "created_at": "2026-10-13T13:30:05Z",
+  "business": {
+    "id": "ent_fpb",
+    "name": "Florida Pole Barn Builders LLC"
+  },
+  "brand": {
+    "id": "brand_fsc",
+    "name": "Florida Security Concepts",
+    "domain": "floridasecurityconcepts.com"
+  },
+  "service": {
+    "id": "svc_fsc_consult",
+    "type": "consultation_call",
+    "name": "Security system consultation, 30 min, phone."
+  },
+  "schedule": {
+    "start": "2026-10-13T09:30:00-04:00",
+    "end": "2026-10-13T10:00:00-04:00",
+    "timezone": "America/New_York"
+  },
+  "customer": {
+    "name": "Casey Nguyen",
+    "phone": "+13525550100",
+    "email": "casey@example.com"
+  },
+  "intake": {
+    "answers": [
+      { "key": "name", "value": "Casey Nguyen" },
+      { "key": "phone", "value": "+13525550100" },
+      { "key": "email", "value": "casey@example.com" },
+      { "key": "project_type", "value": "security system" },
+      { "key": "county_or_zip", "value": "34711" },
+      { "key": "description", "value": "Alarm for a new pole barn office." }
+    ]
+  },
+  "source_agent": {
+    "id": "agent_fsc_booking",
+    "name": "FSC booking agent"
+  },
+  "record": {
+    "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "verification_url": "https://preview.example/verify/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "deposit": null
+}

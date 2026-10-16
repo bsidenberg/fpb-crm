@@ -9,6 +9,43 @@ export const DEFAULT_TIMESTAMP_HEADER = 'x-seald-timestamp'
 export const DEFAULT_SIGNED_TEMPLATE = '{timestamp}.{body}'
 export const MAX_TIMESTAMP_SKEW_MS = 5 * 60 * 1000
 export const BOOKING_SOURCE = 'Booking Agent'
+// Final SEALD contract (bsidenberg/seald docs/integrations/booking-webhook.md).
+export const SEALD_SIGNATURE_HEADER = 'seald-signature'
+export const SEALD_IDEMPOTENCY_HEADER = 'seald-idempotency-key'
+export const SEALD_TOLERANCE_S = 300
+export const SEALD_PAYLOAD_VERSION = 1
+
+/** Parse `t=<unix seconds>,v1=<hex>[,v1=<hex>]`. */
+export function parseSealdSignature(header) {
+  let timestamp = null
+  const signatures = []
+  for (const part of String(header || '').split(',')) {
+    const idx = part.indexOf('=')
+    if (idx < 0) continue
+    const key = part.slice(0, idx).trim()
+    const value = part.slice(idx + 1).trim()
+    if (key === 't') timestamp = value
+    else if (key === 'v1' && value) signatures.push(value.toLowerCase())
+  }
+  return { timestamp, signatures }
+}
+
+/**
+ * Verify Seald-Signature over `${t}.${rawBody}`. Returns null when valid, or an
+ * error code: missing_signature, stale_timestamp, invalid_signature.
+ */
+export async function verifySealdSignature(rawBody, header, secret, nowMs = Date.now()) {
+  if (!header) return 'missing_signature'
+  const { timestamp, signatures } = parseSealdSignature(header)
+  if (!timestamp || !/^\d{1,12}$/.test(timestamp) || signatures.length === 0) return 'invalid_signature'
+  if (Math.abs(nowMs / 1000 - Number(timestamp)) > SEALD_TOLERANCE_S) return 'stale_timestamp'
+  const expected = await hmacSha256Hex(secret, `${timestamp}.${rawBody}`)
+  let ok = false
+  for (const sig of signatures) {
+    if (/^[0-9a-f]{64}$/.test(sig) && safeEqual(sig, expected)) ok = true
+  }
+  return ok ? null : 'invalid_signature'
+}
 
 export async function hmacSha256Hex(secret, message) {
   const enc = new TextEncoder()
@@ -96,7 +133,23 @@ function text(value) {
 
 function nested(body, key) {
   const value = body?.[key]
-  return value && typeof value === 'object' ? value : {}
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+}
+
+// business / brand / source_agent are objects in v1 ({id, name}); older shapes were strings.
+function label(value) {
+  if (value && typeof value === 'object') return text(value.name || value.id)
+  return text(value)
+}
+
+// v1 intake is { answers: [{key, value}] }; flatten to an object.
+function answersObject(intake) {
+  const out = {}
+  const list = Array.isArray(intake?.answers) ? intake.answers : []
+  for (const item of list) {
+    if (item && typeof item === 'object' && item.key) out[String(item.key)] = item.value
+  }
+  return out
 }
 
 /**
@@ -107,31 +160,39 @@ function nested(body, key) {
 export function normalizeBookingBody(body) {
   const src = body && typeof body === 'object' ? body : {}
   const customer = { ...nested(src, 'customer') }
-  const intake = { ...nested(src, 'intake'), ...nested(src, 'answers') }
+  const intakeObj = nested(src, 'intake')
+  const schedule = nested(src, 'schedule')
+  const service = nested(src, 'service')
+  const record = nested(src, 'record')
+  const answers = answersObject(intakeObj)
+  const intake = { ...intakeObj, ...nested(src, 'answers'), ...answers }
   const name = text(customer.name || src.customer_name || src.name)
   const email = text(customer.email || src.customer_email || src.email).toLowerCase()
   const phone = text(customer.phone || src.customer_phone || src.phone)
   const who = splitName(name)
-  const buildingType = text(intake.building_type || intake.buildingType || src.building_type)
+  const buildingType = text(intake.building_type || intake.buildingType || intake.project_type || src.building_type)
   const size = text(intake.size || intake.barn_size || src.size)
-  const location = text(intake.location || src.location)
+  const location = text(intake.location || intake.county_or_zip || src.location)
   const timeline = text(intake.timeline || src.timeline)
   const city = location.includes(',') ? text(location.split(',')[0]) : location
   return {
     bookingId: text(src.booking_id || src.appointment_id || src.bookingId),
     idempotencyKey: text(src.idempotency_key || src.idempotencyKey),
-    signedRecordId: text(src.signed_record_id || src.signedRecordId),
-    verificationUrl: text(src.verification_url || src.verificationUrl),
-    eventId: text(src.event_id || src.eventId),
+    signedRecordId: text(record.id || src.signed_record_id || src.signedRecordId),
+    verificationUrl: text(record.verification_url || src.verification_url || src.verificationUrl),
+    eventId: text(src.id || src.event_id || src.eventId),
+    version: src.v == null ? null : Number(src.v),
+    test: src.test === true,
+    deposit: src.deposit && typeof src.deposit === 'object' ? src.deposit : null,
     eventType: text(src.type || src.event_type).toLowerCase(),
     status: text(src.status).toLowerCase(),
-    serviceType: text(src.service_type || src.serviceType) || 'consultation_call',
-    business: text(src.business),
-    brand: text(src.brand),
-    sourceAgent: text(src.source_agent || src.sourceAgent || src.agent),
-    start: text(src.start || src.starts_at),
-    end: text(src.end || src.ends_at),
-    timezone: text(src.timezone) || 'America/New_York',
+    serviceType: text(service.type || src.service_type || src.serviceType) || 'consultation_call',
+    business: label(src.business),
+    brand: label(src.brand),
+    sourceAgent: label(src.source_agent || src.sourceAgent || src.agent),
+    start: text(schedule.start || src.start || src.starts_at),
+    end: text(schedule.end || src.end || src.ends_at),
+    timezone: text(schedule.timezone || src.timezone) || 'America/New_York',
     customerInvite: src.customer_invite === false || src.customerInvite === false ? false : true,
     customer: {
       name: who.name || name,
@@ -146,6 +207,7 @@ export function normalizeBookingBody(body) {
       location,
       timeline,
       city,
+      description: text(intake.description),
     },
   }
 }
@@ -181,6 +243,7 @@ export function intakeNote(parsed, whenLabel) {
     parsed.intake.size ? `Size: ${parsed.intake.size}` : '',
     parsed.intake.location ? `Location: ${parsed.intake.location}` : '',
     parsed.intake.timeline ? `Timeline: ${parsed.intake.timeline}` : '',
+    parsed.intake.description ? `Description: ${parsed.intake.description}` : '',
     parsed.signedRecordId ? `Signed record: ${parsed.signedRecordId}` : '',
     parsed.verificationUrl ? `Verification: ${parsed.verificationUrl}` : '',
   ].filter(Boolean)

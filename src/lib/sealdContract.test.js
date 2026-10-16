@@ -8,7 +8,11 @@ import {
   statusFromEvent,
   planLeadWrite,
   splitName,
+  parseSealdSignature,
+  verifySealdSignature,
 } from './sealdContract.js'
+import { readFileSync } from 'node:fs'
+
 
 test('signed payload joins timestamp and the raw body with the configured template', () => {
   assert.equal(signedPayload('{timestamp}.{body}', '1700000000', '{"a":1}'), '1700000000.{"a":1}')
@@ -112,4 +116,46 @@ test('lead writes flag the booked call, fill empty intake fields, and return eve
   assert.equal(again.notes, undefined)
   assert.equal(again.lead_source, undefined)
   assert.equal(again.stage, 'new')
+})
+
+const EXAMPLE_RAW = readFileSync(new URL('./sealdWebhookExample.json', import.meta.url), 'utf8')
+const EXAMPLE_SIG = 't=1791898205,v1=836190a331eae5fca11eef82a6720b6abe6bb2235dec82da3ae383c9aa15d943'
+const EXAMPLE_NOW = 1791898205 * 1000
+
+test('SEALD worked example verifies with Seald-Signature', async () => {
+  assert.deepEqual(parseSealdSignature(EXAMPLE_SIG).timestamp, '1791898205')
+  assert.equal(await verifySealdSignature(EXAMPLE_RAW, EXAMPLE_SIG, 'example-signing-secret', EXAMPLE_NOW), null)
+})
+
+test('SEALD signature rejects bad sig, wrong secret, re-serialized body, stale ts, missing header', async () => {
+  const bad = EXAMPLE_SIG.replace(/.$/, '0')
+  assert.equal(await verifySealdSignature(EXAMPLE_RAW, bad, 'example-signing-secret', EXAMPLE_NOW), 'invalid_signature')
+  assert.equal(await verifySealdSignature(EXAMPLE_RAW, EXAMPLE_SIG, 'other', EXAMPLE_NOW), 'invalid_signature')
+  assert.equal(await verifySealdSignature(JSON.stringify(JSON.parse(EXAMPLE_RAW)), EXAMPLE_SIG, 'example-signing-secret', EXAMPLE_NOW), 'invalid_signature')
+  assert.equal(await verifySealdSignature(EXAMPLE_RAW, EXAMPLE_SIG, 'example-signing-secret', EXAMPLE_NOW + 301_000), 'stale_timestamp')
+  assert.equal(await verifySealdSignature(EXAMPLE_RAW, EXAMPLE_SIG, 'example-signing-secret', EXAMPLE_NOW - 299_000), null)
+  assert.equal(await verifySealdSignature(EXAMPLE_RAW, '', 'example-signing-secret', EXAMPLE_NOW), 'missing_signature')
+  assert.equal(await verifySealdSignature(EXAMPLE_RAW, 't=abc,v1=00', 'example-signing-secret', EXAMPLE_NOW), 'invalid_signature')
+})
+
+test('v1 payload normalizes schedule, service, record, intake answers, and object labels', () => {
+  const p = normalizeBookingBody(JSON.parse(EXAMPLE_RAW))
+  assert.equal(p.version, 1)
+  assert.equal(p.eventId, 'evt_fsc_consult_created_example')
+  assert.equal(p.eventType, 'booking.created')
+  assert.equal(p.test, false)
+  assert.equal(p.deposit, null)
+  assert.equal(p.serviceType, 'consultation_call')
+  assert.equal(p.start, '2026-10-13T09:30:00-04:00')
+  assert.equal(p.end, '2026-10-13T10:00:00-04:00')
+  assert.equal(p.business, 'Florida Pole Barn Builders LLC')
+  assert.equal(p.brand, 'Florida Security Concepts')
+  assert.equal(p.sourceAgent, 'FSC booking agent')
+  assert.equal(p.signedRecordId, 'a'.repeat(64))
+  assert.match(p.verificationUrl, /verify/)
+  assert.equal(p.intake.building_type, 'security system')
+  assert.equal(p.intake.location, '34711')
+  assert.equal(p.intake.description, 'Alarm for a new pole barn office.')
+  assert.equal(p.customer.first_name, 'Casey')
+  assert.equal(normalizeBookingBody({ ...JSON.parse(EXAMPLE_RAW), test: true }).test, true)
 })
