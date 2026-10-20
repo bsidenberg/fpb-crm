@@ -27,4 +27,7 @@ export {
   noteMarker,
   intakeNote,
   planLeadWrite,
+  looksLikeStreet,
+  cityFromAddress,
+  cityFromLocation,
 } from '../../supabase/functions/_shared/sealdContract.js'
