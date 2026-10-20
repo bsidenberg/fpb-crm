@@ -10,6 +10,8 @@ import {
   splitName,
   parseSealdSignature,
   verifySealdSignature,
+  verifySealdSignatures,
+  hmacSha256Hex,
 } from './sealdContract.js'
 import { readFileSync } from 'node:fs'
 
@@ -158,4 +160,42 @@ test('v1 payload normalizes schedule, service, record, intake answers, and objec
   assert.equal(p.intake.description, 'Alarm for a new pole barn office.')
   assert.equal(p.customer.first_name, 'Casey')
   assert.equal(normalizeBookingBody({ ...JSON.parse(EXAMPLE_RAW), test: true }).test, true)
+})
+
+test('rotation: accepts Seald-Signature v1 (old key) or Seald-Signature-Next v2 (new key)', async () => {
+  const OLD = 'example-signing-secret'
+  const NEW = 'next-signing-secret'
+  const t = String(EXAMPLE_NOW / 1000)
+  const v2 = await hmacSha256Hex(NEW, `${t}.${EXAMPLE_RAW}`)
+  const env = (both = true) => name => ({ SEALD_WEBHOOK_SECRET: OLD, SEALD_WEBHOOK_SECRET_NEXT: both ? NEW : '' })[name] || ''
+  const hdr = obj => name => obj[name] || ''
+  const run = (h, e = env()) => verifySealdSignatures(EXAMPLE_RAW, hdr(h), e, EXAMPLE_NOW)
+
+  // v1 path unchanged
+  assert.equal(await run({ 'seald-signature': EXAMPLE_SIG }), null)
+  assert.equal(await run({ 'seald-signature': EXAMPLE_SIG }, env(false)), null)
+  // v2 path, with or without Seald-Signature-Key
+  assert.equal(await run({ 'seald-signature-next': `t=${t},v2=${v2}` }), null)
+  assert.equal(await run({ 'seald-signature-next': `t=${t},v2=${v2}`, 'seald-signature-key': 'v1' }), null)
+  // either one valid is enough
+  assert.equal(await run({ 'seald-signature': `t=${t},v1=${'0'.repeat(64)}`, 'seald-signature-next': `t=${t},v2=${v2}` }), null)
+  assert.equal(await run({ 'seald-signature': EXAMPLE_SIG, 'seald-signature-next': `t=${t},v2=${'0'.repeat(64)}` }), null)
+  // v2 header must use v2 key, and the new secret
+  assert.equal(await run({ 'seald-signature-next': `t=${t},v1=${v2}` }), 'invalid_signature')
+  assert.equal(await run({ 'seald-signature-next': `t=${t},v2=${'0'.repeat(64)}` }), 'invalid_signature')
+  assert.equal(await run({ 'seald-signature-next': EXAMPLE_SIG.replace('v1=', 'v2=') }), 'invalid_signature')
+  // a new-key signature in the old header is rejected
+  assert.equal(await run({ 'seald-signature': `t=${t},v1=${v2}` }), 'invalid_signature')
+  // NEXT unset: v2 path skipped
+  assert.equal(await run({ 'seald-signature-next': `t=${t},v2=${v2}` }, env(false)), 'missing_signature')
+  // stale v2, missing everything, nothing configured
+  const stale = await verifySealdSignatures(EXAMPLE_RAW, hdr({ 'seald-signature-next': `t=${t},v2=${v2}` }), env(), EXAMPLE_NOW + 301_000)
+  assert.equal(stale, 'stale_timestamp')
+  assert.equal(await run({}), 'missing_signature')
+  assert.equal(await run({ 'seald-signature-key': 'v1' }), 'missing_signature')
+  assert.equal(await run({ 'seald-signature': EXAMPLE_SIG }, () => ''), 'webhook_secret_not_configured')
+  // after the old key is dropped (only NEXT set), v1 is refused
+  const nextOnly = name => (name === 'SEALD_WEBHOOK_SECRET_NEXT' ? NEW : '')
+  assert.equal(await run({ 'seald-signature': EXAMPLE_SIG }, nextOnly), 'missing_signature')
+  assert.equal(await run({ 'seald-signature-next': `t=${t},v2=${v2}` }, nextOnly), null)
 })

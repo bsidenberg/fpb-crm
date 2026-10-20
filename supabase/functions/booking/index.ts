@@ -35,8 +35,8 @@ import {
   timestampSkewError,
   SEALD_IDEMPOTENCY_HEADER,
   SEALD_PAYLOAD_VERSION,
-  SEALD_SIGNATURE_HEADER,
-  verifySealdSignature,
+  SEALD_SIGNATURE_SCHEMES,
+  verifySealdSignatures,
 } from '../_shared/sealdContract.js'
 import {
   createEvent,
@@ -55,7 +55,7 @@ const MAX_BODY = 65_536
 const corsHeaders: Record<string, string> = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'access-control-allow-headers': 'authorization, content-type, apikey, x-api-key, x-client-info, idempotency-key, seald-signature, seald-idempotency-key',
+  'access-control-allow-headers': 'authorization, content-type, apikey, x-api-key, x-client-info, idempotency-key, seald-signature, seald-signature-next, seald-signature-key, seald-idempotency-key',
 }
 
 function json(body: unknown, status = 200) {
@@ -645,12 +645,15 @@ async function recordEvent(
 }
 
 async function handleWebhook(req: Request, db: SupabaseClient) {
-  const secret = Deno.env.get('SEALD_WEBHOOK_SECRET') || ''
-  if (!secret) return json({ error: 'webhook_secret_not_configured' }, 503)
+  const getSecret = (name: string) => Deno.env.get(name) || ''
+  if (!SEALD_SIGNATURE_SCHEMES.some(s => getSecret(s.secretEnv))) {
+    return json({ error: 'webhook_secret_not_configured' }, 503)
+  }
   const raw = await req.text()
   if (raw.length > MAX_BODY) return json({ error: 'payload_too_large' }, 413)
-  // Seald-Signature: t=<unix>,v1=<hex hmac-sha256 of `${t}.${rawBody}`>; 300 s tolerance.
-  const sigError = await verifySealdSignature(raw, headerLookup(req.headers, SEALD_SIGNATURE_HEADER), secret, Date.now())
+  // Seald-Signature: t=<unix>,v1=<hex hmac-sha256 of `${t}.${rawBody}`> with SEALD_WEBHOOK_SECRET, or
+  // Seald-Signature-Next: t=..,v2=.. (same HMAC) with SEALD_WEBHOOK_SECRET_NEXT; 300 s tolerance.
+  const sigError = await verifySealdSignatures(raw, (name: string) => headerLookup(req.headers, name), getSecret, Date.now())
   if (sigError) return json({ error: sigError }, 401)
 
   let payload: unknown
