@@ -14,9 +14,18 @@ export const SEALD_SIGNATURE_HEADER = 'seald-signature'
 export const SEALD_IDEMPOTENCY_HEADER = 'seald-idempotency-key'
 export const SEALD_TOLERANCE_S = 300
 export const SEALD_PAYLOAD_VERSION = 1
+// Accepted webhook signature schemes, tried in order. Each is the same HMAC
+// (hex sha256 of `${t}.${rawBody}`, 300 s tolerance) with its own header,
+// version key, and secret env var. During a key rotation both entries exist;
+// to retire a key, delete its entry. Seald-Signature-Key is informational
+// only and never changes verification.
+export const SEALD_SIGNATURE_SCHEMES = Object.freeze([
+  Object.freeze({ header: 'seald-signature', versionKey: 'v1', secretEnv: 'SEALD_WEBHOOK_SECRET' }),
+  Object.freeze({ header: 'seald-signature-next', versionKey: 'v2', secretEnv: 'SEALD_WEBHOOK_SECRET_NEXT' }),
+])
 
-/** Parse `t=<unix seconds>,v1=<hex>[,v1=<hex>]`. */
-export function parseSealdSignature(header) {
+/** Parse `t=<unix seconds>,v1=<hex>[,v1=<hex>]` (or another version key). */
+export function parseSealdSignature(header, versionKey = 'v1') {
   let timestamp = null
   const signatures = []
   for (const part of String(header || '').split(',')) {
@@ -25,7 +34,7 @@ export function parseSealdSignature(header) {
     const key = part.slice(0, idx).trim()
     const value = part.slice(idx + 1).trim()
     if (key === 't') timestamp = value
-    else if (key === 'v1' && value) signatures.push(value.toLowerCase())
+    else if (key === versionKey && value) signatures.push(value.toLowerCase())
   }
   return { timestamp, signatures }
 }
@@ -34,9 +43,10 @@ export function parseSealdSignature(header) {
  * Verify Seald-Signature over `${t}.${rawBody}`. Returns null when valid, or an
  * error code: missing_signature, stale_timestamp, invalid_signature.
  */
-export async function verifySealdSignature(rawBody, header, secret, nowMs = Date.now()) {
+export async function verifySealdSignature(rawBody, header, secret, nowMs = Date.now(), versionKey = 'v1') {
   if (!header) return 'missing_signature'
-  const { timestamp, signatures } = parseSealdSignature(header)
+  if (!secret) return 'invalid_signature'
+  const { timestamp, signatures } = parseSealdSignature(header, versionKey)
   if (!timestamp || !/^\d{1,12}$/.test(timestamp) || signatures.length === 0) return 'invalid_signature'
   if (Math.abs(nowMs / 1000 - Number(timestamp)) > SEALD_TOLERANCE_S) return 'stale_timestamp'
   const expected = await hmacSha256Hex(secret, `${timestamp}.${rawBody}`)
@@ -45,6 +55,30 @@ export async function verifySealdSignature(rawBody, header, secret, nowMs = Date
     if (/^[0-9a-f]{64}$/.test(sig) && safeEqual(sig, expected)) ok = true
   }
   return ok ? null : 'invalid_signature'
+}
+
+/**
+ * Accept the request if any configured scheme verifies. getHeader(name) and
+ * getSecret(envName) are lookups; a scheme whose secret is unset is skipped.
+ * Returns null when valid; 'webhook_secret_not_configured' when no scheme has
+ * a secret; otherwise the first error from a scheme whose header was present,
+ * or 'missing_signature' when none was.
+ */
+export async function verifySealdSignatures(rawBody, getHeader, getSecret, nowMs = Date.now(), schemes = SEALD_SIGNATURE_SCHEMES) {
+  let configured = 0
+  let firstError = null
+  for (const scheme of schemes) {
+    const secret = getSecret(scheme.secretEnv) || ''
+    if (!secret) continue
+    configured += 1
+    const header = getHeader(scheme.header) || ''
+    if (!header) continue
+    const err = await verifySealdSignature(rawBody, header, secret, nowMs, scheme.versionKey)
+    if (!err) return null
+    if (!firstError) firstError = err
+  }
+  if (!configured) return 'webhook_secret_not_configured'
+  return firstError || 'missing_signature'
 }
 
 export async function hmacSha256Hex(secret, message) {
