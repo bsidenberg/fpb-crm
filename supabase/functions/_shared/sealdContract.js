@@ -186,6 +186,69 @@ function answersObject(intake) {
   return out
 }
 
+const US_STATES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS',
+  'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC',
+  'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+  'FLORIDA',
+])
+const ZIP_RE = /^\d{5}(?:-\d{4})?$/
+const COUNTRY_RE = /^(?:usa|us|u\.s\.a?\.?|united states(?: of america)?)$/i
+const UNIT_RE = /^(?:apt|apartment|unit|suite|ste|#|bldg|building|lot|trlr|room|rm)\b\.?/i
+
+/** True for a street line such as "8425 A D Mims Rd" or "PO Box 120386". */
+export function looksLikeStreet(value) {
+  const v = text(value)
+  if (!v) return false
+  if (/^p\.?\s*o\.?\s*box\b/i.test(v)) return true
+  return /^\d+[a-z]?(?:-\d+)?\s+\S/i.test(v)
+}
+
+function stripStateZip(part) {
+  let words = text(part).split(/\s+/).filter(Boolean)
+  if (words.length && ZIP_RE.test(words[words.length - 1])) words = words.slice(0, -1)
+  if (words.length && US_STATES.has(words[words.length - 1].replace(/\.$/, '').toUpperCase())) {
+    words = words.slice(0, -1)
+  }
+  return words.join(' ')
+}
+
+function cleanCity(value) {
+  const v = text(value)
+  if (!v) return ''
+  if (/\d/.test(v)) return ''
+  if (/\bcounty\b/i.test(v)) return ''
+  if (US_STATES.has(v.replace(/\.$/, '').toUpperCase())) return ''
+  if (!/^[a-z][a-z .'-]*$/i.test(v)) return ''
+  return v
+}
+
+/**
+ * City from a one-line street address: "123 Main St, Orlando, FL 32801" and
+ * "PO Box 1, Clermont FL 34712" give the city. Without a comma after the
+ * street ("8425 A D Mims Rd") there is no reliable city, so return ''.
+ */
+export function cityFromAddress(address) {
+  const parts = text(address).split(',').map(p => p.trim()).filter(Boolean)
+  while (parts.length && COUNTRY_RE.test(parts[parts.length - 1])) parts.pop()
+  if (parts.length < 2) return ''
+  let rest = parts.slice(1)
+  while (rest.length && UNIT_RE.test(rest[0])) rest = rest.slice(1)
+  if (!rest.length) return ''
+  return cleanCity(stripStateZip(rest[0]))
+}
+
+/**
+ * City from a free-text location answer that is not a street: "Clermont, FL",
+ * "Clermont FL 34711", "Clermont". ZIP-only and county answers give ''.
+ */
+export function cityFromLocation(location) {
+  const v = text(location)
+  if (!v || looksLikeStreet(v)) return ''
+  const first = v.split(',')[0]
+  return cleanCity(stripStateZip(first))
+}
+
 /**
  * Accept the booking POST body and the webhook body, which share fields.
  * service_type on the appointment is the consultation. It is not copied onto
@@ -208,7 +271,14 @@ export function normalizeBookingBody(body) {
   const size = text(intake.size || intake.barn_size || src.size)
   const location = text(intake.location || intake.county_or_zip || src.location)
   const timeline = text(intake.timeline || src.timeline)
-  const city = location.includes(',') ? text(location.split(',')[0]) : location
+  const serviceAddress = text(
+    intake.service_address || intake.serviceAddress || intake.address || intake.street_address ||
+      src.service_address || src.serviceAddress || src.address || customer.address,
+  )
+  const address = serviceAddress || (looksLikeStreet(location) ? location : '')
+  const city = cleanCity(text(intake.city || src.city || customer.city)) ||
+    cityFromAddress(address) ||
+    cityFromLocation(location)
   return {
     bookingId: text(src.booking_id || src.appointment_id || src.bookingId),
     idempotencyKey: text(src.idempotency_key || src.idempotencyKey),
@@ -240,6 +310,7 @@ export function normalizeBookingBody(body) {
       size,
       location,
       timeline,
+      address,
       city,
       description: text(intake.description),
     },
@@ -309,6 +380,7 @@ export function planLeadWrite(existing, parsed, { owner, whenLabel } = {}) {
   fill('barn_size', parsed.intake.size)
   fill('timeline', parsed.intake.timeline)
   fill('city', parsed.intake.city)
+  fill('address', parsed.intake.address)
   fill('email', parsed.customer.email)
   fill('phone', parsed.customer.phone)
   fill('owner', owner)

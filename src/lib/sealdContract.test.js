@@ -12,6 +12,9 @@ import {
   verifySealdSignature,
   verifySealdSignatures,
   hmacSha256Hex,
+  looksLikeStreet,
+  cityFromAddress,
+  cityFromLocation,
 } from './sealdContract.js'
 import { readFileSync } from 'node:fs'
 
@@ -198,4 +201,84 @@ test('rotation: accepts Seald-Signature v1 (old key) or Seald-Signature-Next v2 
   const nextOnly = name => (name === 'SEALD_WEBHOOK_SECRET_NEXT' ? NEW : '')
   assert.equal(await run({ 'seald-signature': EXAMPLE_SIG }, nextOnly), 'missing_signature')
   assert.equal(await run({ 'seald-signature-next': `t=${t},v2=${v2}` }, nextOnly), null)
+})
+
+test('cityFromAddress parses the city from a one-line street address', () => {
+  assert.equal(cityFromAddress('123 Main St, Orlando, FL 32801'), 'Orlando')
+  assert.equal(cityFromAddress('PO Box 120386, Clermont FL 34712'), 'Clermont')
+  assert.equal(cityFromAddress('100 Demo Drive, Clermont FL 34711'), 'Clermont')
+  assert.equal(cityFromAddress('55 Oak Ave, Apt 4, Winter Garden, FL'), 'Winter Garden')
+  assert.equal(cityFromAddress('9 Elm St, Lake Mary, Florida 32746, USA'), 'Lake Mary')
+  assert.equal(cityFromAddress('12 Pine Rd, Mount Dora'), 'Mount Dora')
+  // No comma after the street, or only state/ZIP after it: no guess.
+  assert.equal(cityFromAddress('8425 A D MIMS RD'), '')
+  assert.equal(cityFromAddress('8425 A D Mims Rd Orlando FL 32818'), '')
+  assert.equal(cityFromAddress('1 Main St, FL 32801'), '')
+  assert.equal(cityFromAddress('1 Main St, 32801'), '')
+  assert.equal(cityFromAddress(''), '')
+  assert.equal(cityFromAddress(null), '')
+})
+
+test('cityFromLocation keeps city answers and rejects streets, ZIPs and counties', () => {
+  assert.equal(cityFromLocation('Clermont, FL'), 'Clermont')
+  assert.equal(cityFromLocation('Clermont FL 34711'), 'Clermont')
+  assert.equal(cityFromLocation('Clermont'), 'Clermont')
+  assert.equal(cityFromLocation('34711'), '')
+  assert.equal(cityFromLocation('Lake County FL'), '')
+  assert.equal(cityFromLocation('9237 Halsey Dr'), '')
+  assert.equal(cityFromLocation('8425 A D MIMS RD'), '')
+  assert.equal(looksLikeStreet('PO Box 5'), true)
+  assert.equal(looksLikeStreet('34711'), false)
+  assert.equal(looksLikeStreet('Clermont, FL'), false)
+})
+
+test('booking with a street in location/service_address: street goes to address, city stays clean', () => {
+  // Shape of a real Booqer booking.created payload (answers list + top-level service_address).
+  const body = {
+    v: 1,
+    type: 'booking.created',
+    customer: { name: 'Pat Doe', email: 'pat@example.com', phone: '4075550100' },
+    intake: {
+      answers: [
+        { key: 'size', value: '30x80x12' },
+        { key: 'location', value: '8425 A D MIMS RD' },
+        { key: 'service_address', value: '8425 A D MIMS RD' },
+      ],
+    },
+    service_address: '8425 A D MIMS RD',
+  }
+  const p = normalizeBookingBody(body)
+  assert.equal(p.intake.address, '8425 A D MIMS RD')
+  assert.equal(p.intake.city, '')
+  const created = planLeadWrite(null, p)
+  assert.equal(created.address, '8425 A D MIMS RD')
+  assert.equal(created.city, undefined)
+
+  const full = normalizeBookingBody({
+    ...body,
+    intake: { answers: [{ key: 'location', value: 'clermont' }, { key: 'service_address', value: '100 Demo Drive, Clermont FL 34711' }] },
+    service_address: '100 Demo Drive, Clermont FL 34711',
+  })
+  assert.equal(full.intake.address, '100 Demo Drive, Clermont FL 34711')
+  assert.equal(full.intake.city, 'Clermont')
+
+  // Street only in location (older payloads): address gets it, city is not the street.
+  const old = normalizeBookingBody({ ...body, intake: { answers: [{ key: 'location', value: '9237 Halsey Dr' }] }, service_address: undefined })
+  assert.equal(old.intake.address, '9237 Halsey Dr')
+  assert.equal(old.intake.city, '')
+
+  // A structured city wins over parsing.
+  const structured = normalizeBookingBody({ ...body, intake: { city: 'Orlando', service_address: '8425 A D MIMS RD' } })
+  assert.equal(structured.intake.city, 'Orlando')
+  assert.equal(structured.intake.address, '8425 A D MIMS RD')
+})
+
+test('existing lead keeps its address and city; blank address is filled', () => {
+  const p = normalizeBookingBody({ intake: { service_address: '123 Main St, Orlando, FL 32801' } })
+  const keep = planLeadWrite({ id: 'x', city: 'Ocoee', address: '1 Old Rd', notes: '' }, p)
+  assert.equal(keep.city, undefined)
+  assert.equal(keep.address, undefined)
+  const fillIn = planLeadWrite({ id: 'x', city: '', address: null, notes: '' }, p)
+  assert.equal(fillIn.city, 'Orlando')
+  assert.equal(fillIn.address, '123 Main St, Orlando, FL 32801')
 })
