@@ -6,6 +6,7 @@ import { getFollowUpStatus } from '../lib/followup'
 import { STAGES, TEMPERATURE, ACTIVITY_TYPES } from '../lib/stages'
 import { getScoreGrade } from '../utils/scoreLeads'
 import PinnedHScroll from '../components/PinnedHScroll'
+import { shopVisibleNote } from '../lib/sealdContract'
 
 const STAGE_MAP = Object.fromEntries(STAGES.map(s => [s.id, s]))
 const TEMP_MAP  = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
@@ -318,7 +319,7 @@ export default function FollowUps() {
                             WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
                             fontSize: 11, color: 'var(--color-text-3)',
                           }}>
-                            {activity.body}
+                            {shopVisibleNote(activity.body)}
                           </span>
                         </div>
                       ) : (

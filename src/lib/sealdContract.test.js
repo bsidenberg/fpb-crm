@@ -7,6 +7,10 @@ import {
   normalizeBookingBody,
   statusFromEvent,
   planLeadWrite,
+  intakeNote,
+  bookingLeadSource,
+  shopVisibleNote,
+  retainBookingMarkers,
   splitName,
   parseSealdSignature,
   verifySealdSignature,
@@ -17,6 +21,7 @@ import {
   cityFromLocation,
 } from './sealdContract.js'
 import { readFileSync } from 'node:fs'
+import { calendarInviteContent } from '../../supabase/functions/_shared/calendarInvite.js'
 
 
 test('signed payload joins timestamp and the raw body with the configured template', () => {
@@ -72,7 +77,8 @@ test('lead writes flag the booked call, fill empty intake fields, and return eve
   const created = planLeadWrite(null, parsed, { owner: 'Mathew', whenLabel: 'Oct 14' })
   assert.equal(created.booked_call, true)
   assert.equal(created.stage, 'new')
-  assert.equal(created.source, 'Booking Agent')
+  assert.equal(created.source, 'Booqer')
+  assert.equal(created.lead_source, 'Booqer')
   assert.equal(created.building_type, 'Open Pole Barn')
   assert.equal(created.barn_size, '24x30')
   assert.equal(created.city, 'Clermont')
@@ -81,8 +87,17 @@ test('lead writes flag the booked call, fill empty intake fields, and return eve
   assert.equal(created.last_name, '—')
   assert.equal(Object.hasOwn(created, 'quote_sent_at'), false)
   assert.equal(Object.hasOwn(created, 'service_type'), false)
-  assert.match(created.notes, /consultation_call/)
-  assert.match(created.notes, /sig_9/)
+  assert.match(created.notes, /Booqer booking: Project consultation/)
+  assert.match(created.notes, /Oct 14 with Mathew/)
+  assert.match(created.notes, /Customer: Sam, 3525550100, sam@example.com/)
+  assert.match(created.notes, /Project size: 24x30/)
+  assert.match(created.notes, /Source: Booqer/)
+  assert.match(created.notes, /<!-- \[booked-call:sig_9\] -->/)
+  assert.doesNotMatch(created.notes, /consultation_call/)
+  assert.doesNotMatch(created.notes, /Signed record/)
+  assert.doesNotMatch(created.notes, /seald-voice/)
+  assert.doesNotMatch(created.notes, /^\[booked-call:/m)
+  assert.equal(shopVisibleNote(created.notes).includes('booked-call'), false)
 
   const existing = planLeadWrite({
     source: 'Google Ads',
@@ -95,7 +110,7 @@ test('lead writes flag the booked call, fill empty intake fields, and return eve
     quote_sent_at: '2026-10-01T12:00:00.000Z',
   }, parsed, { owner: 'Mathew' })
   assert.equal(existing.source, undefined)
-  assert.equal(existing.lead_source, 'Booking Agent')
+  assert.equal(existing.lead_source, 'Booqer')
   assert.equal(existing.building_type, undefined)
   assert.equal(existing.barn_size, undefined)
   assert.equal(existing.city, undefined)
@@ -106,6 +121,13 @@ test('lead writes flag the booked call, fill empty intake fields, and return eve
   assert.equal(Object.hasOwn(existing, 'stage_changed_at'), false)
   assert.match(existing.notes, /Spoke yesterday/)
   assert.match(existing.notes, /\[booked-call:sig_9\]/)
+
+  const legacy = planLeadWrite({
+    source: 'Google Ads',
+    lead_source: 'Google Ads',
+    notes: '[booked-call:sig_9]\nBooked consultation Oct 14\nSigned record: sig_9',
+  }, parsed, { owner: 'Mathew' })
+  assert.equal(legacy.notes, undefined)
 
   const kept = planLeadWrite({
     source: 'Google Ads',
@@ -201,6 +223,162 @@ test('rotation: accepts Seald-Signature v1 (old key) or Seald-Signature-Next v2 
   const nextOnly = name => (name === 'SEALD_WEBHOOK_SECRET_NEXT' ? NEW : '')
   assert.equal(await run({ 'seald-signature': EXAMPLE_SIG }, nextOnly), 'missing_signature')
   assert.equal(await run({ 'seald-signature-next': `t=${t},v2=${v2}` }, nextOnly), null)
+})
+
+test('shop note hides the dedupe marker and the lines that are not job details', () => {
+  const legacy = [
+    '[booked-call:abc]',
+    'Booked consultation Wed, Oct 21, 1:30 PM EDT',
+    'Service: consultation_call',
+    'Business: Florida Pole Barn Builders LLC',
+    'Brand: Florida Pole Barn',
+    'Size: 16 X 37 Aprox.',
+    'Location: 4290 5Th St SW',
+    'Signed record: abc',
+    'Verification: https://booqer.ai/v/abc',
+  ].join('\n')
+  assert.equal(shopVisibleNote(legacy), [
+    'Booked consultation Wed, Oct 21, 1:30 PM EDT',
+    'Project size: 16 X 37 Aprox.',
+    'Location: 4290 5Th St SW',
+    'View booking: https://booqer.ai/v/abc',
+  ].join('\n'))
+  assert.equal(shopVisibleNote('Spoke yesterday'), 'Spoke yesterday')
+  const edited = retainBookingMarkers(legacy, 'Spoke yesterday')
+  assert.match(edited, /<!-- \[booked-call:abc\] -->/)
+  assert.equal(shopVisibleNote(edited), 'Spoke yesterday')
+})
+
+test('attribution label, consent fallback, and UTM fields fill blank lead columns', () => {
+  const labeled = normalizeBookingBody({
+    signed_record_id: 'sig_attr',
+    source_label: 'Booqer: Website, referred by floridapolebarn.com',
+    channel: 'website',
+    assistant: 'ChatGPT',
+    consent_source: 'web',
+    referrer_host: 'floridapolebarn.com',
+    referrer_url: 'https://floridapolebarn.com/pole-barns',
+    landing_page: 'https://floridapolebarn.com/quote',
+    utm_source: 'chatgpt',
+    utm_medium: 'ai',
+    utm_campaign: 'spring',
+    utm_term: 'pole barn',
+    utm_content: 'card',
+    customer: { name: 'Josh', phone: '772-766-2433', email: 'josh@infocrg.com' },
+    intake: { size: '16 x 37 approx.', location: '4290 5th St SW', notes: 'Gate code 1234' },
+    verification_url: 'https://booqer.ai/shops/florida-pole-barn/requests/30e',
+    service_type: 'consultation_call',
+    business: 'Florida Pole Barn Builders LLC',
+    brand: 'Florida Pole Barn',
+  })
+  assert.equal(labeled.channel, 'website')
+  assert.equal(labeled.assistant, 'ChatGPT')
+  assert.equal(bookingLeadSource(labeled), 'Booqer: Website, referred by floridapolebarn.com')
+  const note = intakeNote(labeled, 'Wed, Oct 21, 1:30 PM EDT', { withName: 'Mathew' })
+  assert.equal(note, [
+    'Booqer booking: Project consultation',
+    'Wed, Oct 21, 1:30 PM EDT with Mathew',
+    'Customer: Josh, 772-766-2433, josh@infocrg.com',
+    'Project size: 16 x 37 approx.',
+    'Location: 4290 5th St SW',
+    'Notes: Gate code 1234',
+    'Source: Booqer: Website, referred by floridapolebarn.com',
+    'View booking: https://booqer.ai/shops/florida-pole-barn/requests/30e',
+    '<!-- [booked-call:sig_attr] -->',
+  ].join('\n'))
+  assert.doesNotMatch(note, /Florida Pole Barn Builders/)
+  assert.doesNotMatch(note, /SEALD/i)
+
+  const created = planLeadWrite(null, labeled, { owner: 'Mathew', whenLabel: 'Wed, Oct 21, 1:30 PM EDT' })
+  assert.equal(created.source, 'Booqer: Website, referred by floridapolebarn.com')
+  assert.equal(created.lead_source, 'Booqer: Website, referred by floridapolebarn.com')
+  assert.equal(created.referrer_url, 'https://floridapolebarn.com/pole-barns')
+  assert.equal(created.landing_page, 'https://floridapolebarn.com/quote')
+  assert.equal(created.utm_source, 'chatgpt')
+  assert.equal(created.utm_medium, 'ai')
+  assert.equal(created.utm_campaign, 'spring')
+  assert.equal(created.utm_term, 'pole barn')
+  assert.equal(created.utm_content, 'card')
+
+  const kept = planLeadWrite({
+    source: 'Google Ads',
+    lead_source: 'Google Ads',
+    utm_source: 'google',
+    referrer_url: 'https://google.com',
+    notes: '',
+  }, labeled, { owner: 'Mathew' })
+  assert.equal(kept.source, undefined)
+  assert.equal(kept.lead_source, undefined)
+  assert.equal(kept.utm_source, undefined)
+  assert.equal(kept.referrer_url, undefined)
+  assert.equal(kept.utm_medium, 'ai')
+  assert.equal(kept.landing_page, 'https://floridapolebarn.com/quote')
+
+  const web = normalizeBookingBody({ consent_source: 'web', customer: { name: 'Pat' } })
+  assert.equal(bookingLeadSource(web), 'Booqer: Website')
+  assert.equal(bookingLeadSource(normalizeBookingBody({ consent_source: 'mcp' })), 'Booqer: AI assistant')
+  assert.equal(bookingLeadSource(normalizeBookingBody({ consent_source: 'api' })), 'Booqer: API')
+  assert.equal(bookingLeadSource(normalizeBookingBody({})), 'Booqer')
+
+  const nested = normalizeBookingBody({
+    attribution: {
+      source_label: 'Booqer: ChatGPT',
+      referrer_host: 'chatgpt.com',
+      consent_source: 'mcp',
+      utm: { source: 'chatgpt', medium: 'assistant' },
+    },
+  })
+  assert.equal(bookingLeadSource(nested), 'Booqer: ChatGPT')
+  assert.equal(nested.utmSource, 'chatgpt')
+  assert.equal(nested.utmMedium, 'assistant')
+  assert.equal(nested.consentSource, 'mcp')
+  assert.equal(planLeadWrite(null, nested).referrer_url, 'https://chatgpt.com')
+
+  const hostOnly = normalizeBookingBody({ referrer_host: 'floridapolebarn.com', channel: 'website' })
+  assert.equal(hostOnly.channel, 'website')
+  const hostLead = planLeadWrite(null, hostOnly)
+  assert.equal(hostLead.referrer_url, 'https://floridapolebarn.com')
+  assert.equal(hostLead.source, 'Booqer')
+  assert.match(hostLead.notes, /Source: Booqer/)
+  assert.doesNotMatch(hostLead.notes, /Source: website/)
+
+  const partial = intakeNote(normalizeBookingBody({
+    customer: { phone: '772-766-2433' },
+    intake: { description: 'Call after 5' },
+  }), '')
+  assert.match(partial, /Customer: 772-766-2433/)
+  assert.doesNotMatch(partial, /Customer: ,/)
+  assert.match(partial, /Notes: Call after 5/)
+  assert.doesNotMatch(partial, /Project size:/)
+})
+
+test('calendar invite keeps job details and drops the signed record and SEALD line', () => {
+  const invite = calendarInviteContent({
+    leadId: 'lead-1',
+    name: 'Josh',
+    email: 'josh@infocrg.com',
+    phone: '772-766-2433',
+    assignee: 'Mathew',
+    intake: { size: '16 x 37 approx.', location: '4290 5th St SW', notes: 'Gate code 1234', building_type: 'Open' },
+    verificationUrl: 'https://booqer.ai/records/abc',
+  })
+  assert.equal(invite.subject, 'FPB consultation — Josh')
+  assert.match(invite.html, /Customer:/)
+  assert.match(invite.html, /josh@infocrg.com/)
+  assert.match(invite.html, /772-766-2433/)
+  assert.match(invite.html, /With:/)
+  assert.match(invite.html, /Mathew/)
+  assert.match(invite.html, /Size:/)
+  assert.match(invite.html, /Location:/)
+  assert.match(invite.html, /Notes:/)
+  assert.match(invite.html, /Gate code 1234/)
+  assert.match(invite.html, /Open in FPB CRM/)
+  assert.match(invite.html, /\/leads\/lead-1/)
+  assert.doesNotMatch(invite.html, /Signed record/)
+  assert.doesNotMatch(invite.html, /SEALD/)
+  assert.doesNotMatch(invite.html, /separate reminder/)
+  assert.doesNotMatch(invite.html, /Building/)
+  assert.doesNotMatch(invite.html, /booqer\.ai\/records/)
 })
 
 test('cityFromAddress parses the city from a one-line street address', () => {

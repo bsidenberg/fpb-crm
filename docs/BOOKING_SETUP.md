@@ -27,7 +27,7 @@ Order inside a role is alphabetical email. A second primary would lose to the ea
 
 On create and reschedule, the assignee’s calendar event includes:
 
-- The customer as a **required** attendee when they have an email and `customer_invite` is not `false` (default is to invite them). SEALD sends no reminders, so this invite is the reminder (60 minutes before, `isReminderOn`).
+- The customer as a **required** attendee when they have an email and `customer_invite` is not `false` (default is to invite them). Outlook’s own reminder is 60 minutes before (`isReminderOn`). The event body does not mention a reminder or SEALD.
 - Every other active member with `notify_all = true` as an **optional** attendee. That puts the call on Brian’s calendar as FYI when Mathew owns it. Brian is not added to his own event when he is the assignee. Mathew is not FYI’d when Brian covers, because Mathew’s `notify_all` is false.
 
 On cancel, the Graph event is deleted. Outlook sends the cancellation to the customer and to Brian. Completed and no-show leave the event in place.
@@ -42,7 +42,7 @@ Change role or `notify_all` on the Calls page (member chip → settings). The co
 - Minimum notice is **60 minutes**. Configurable per member (`min_notice_minutes`).
 - Public slot length is the primary member’s `call_minutes` (30).
 - `consultation_call` is stored on the appointment. It is **not** written to `leads.service_type` (that column stays Kit Delivery Only / Kit + Installation).
-- New leads are stage `new`, priority `warm`, source **Booking Agent**. Linking an existing lead (any stage, including won and lost) sets `stage` to `new` and `booked_call` true. `lead_source` becomes **Booking Agent** only when it is blank. `quote_sent_at` is not changed. `stage_changed_at` updates only when the stage actually changes.
+- New leads are stage `new`, priority `warm`. `source` and `lead_source` are Booqer’s `source_label` when the webhook sends one (for example `Booqer: Website, referred by floridapolebarn.com` or `Booqer: ChatGPT`). With no `source_label`, the label is `Booqer`, or `Booqer: Website` / `Booqer: AI assistant` / `Booqer: API` when `consent_source` is `web`, `mcp`, or `api`. Linking an existing lead (any stage, including won and lost) sets `stage` to `new` and `booked_call` true. `source`, `lead_source`, `referrer_url`, `landing_page`, and `utm_*` are filled only when blank. `quote_sent_at` is not changed. `stage_changed_at` updates only when the stage actually changes.
 - Header names below are the defaults. Override them with the secrets in the next section if SEALD settles on different names.
 - Signed payload default is `{timestamp}.{body}` (unix timestamp string, a dot, then the raw request body).
 - If Microsoft secrets are missing, the booking still succeeds and `outlook.status` is `skipped` (`microsoft_not_configured`).
@@ -58,12 +58,15 @@ In the Supabase SQL editor for project `flabvhdgqddbfitbqjqk`, run in this order
 2. `supabase/migrations/20261012000003_booking_agent_lead_source.sql`
 3. `supabase/migrations/20261012000005_return_booked_leads_to_new.sql`
 4. `supabase/migrations/20261014000001_booking_window_0830.sql`
+5. `supabase/migrations/20261021000001_booqer_booking_attribution.sql`
 
 Do **not** re-run `20260923000001_normalize_lead_source.sql` after step 2. The older file would replace `normalize_lead_channel` and drop the Booking Agent channel. Step 2 does not backfill existing leads.
 
-Step 3 returns a matched lead to stage `new`, sets `booked_call`, and leaves `quote_sent_at` alone. `lead_source` becomes Booking Agent only when it is blank.
+Step 3 returns a matched lead to stage `new`, sets `booked_call`, and leaves `quote_sent_at` alone. Step 5 replaces that function’s blank-source fill (it was Booking Agent) with the Booqer label.
 
-Step 4 is the booking window. If steps 1–3 are already applied, run only step 4. It moves team members who are still on Mon–Fri 09:30–16:30 to 08:30–16:30. The replaced `book_consultation` still calls `apply_booking_lead_patch`, so a matched lead returns to New Lead with `booked_call` true. `reschedule_consultation` and the `booked_calls_time_check` trigger reject a weekend, a start before 8:30 AM, a start at or after 4:30 PM, and any minute other than `:00` or `:30`. Do not edit `20261012000002_booked_calls.sql` or `20261012000005_return_booked_leads_to_new.sql`.
+Step 4 is the booking window. If steps 1–3 are already applied, run step 4 and then step 5. It moves team members who are still on Mon–Fri 09:30–16:30 to 08:30–16:30. The replaced `book_consultation` still calls `apply_booking_lead_patch`, so a matched lead returns to New Lead with `booked_call` true. `reschedule_consultation` and the `booked_calls_time_check` trigger reject a weekend, a start before 8:30 AM, a start at or after 4:30 PM, and any minute other than `:00` or `:30`. Do not edit `20261012000002_booked_calls.sql` or `20261012000005_return_booked_leads_to_new.sql`.
+
+Step 5 replaces `apply_booking_lead_patch`, `book_consultation`, and `normalize_lead_channel`. It does not rewrite existing leads. Blank `source` / `lead_source` use the booking request’s `lead_source` (fallback `Booqer`). Blank referrer, landing page, and UTM columns are filled from the request. A source that already starts with `Booqer` is left as stored if a channel backfill is run later. If steps 1–4 are already applied, run only step 5.
 
 Step 2’s file ends with `notify pgrst, 'reload schema'`. If the Calls page says the table is missing after a successful run, run that notify again.
 
@@ -146,7 +149,7 @@ Graph calls:
 - Update: `PATCH` the same event (no `transactionId` on update)
 - Cancel: `DELETE` the event (404 is treated as already gone)
 
-Event subject: `FPB consultation — {name}`. Body links to `https://fpbcrm-alpha.vercel.app/leads/{id}` and includes intake plus the verification URL. `showAs` is `busy`. `transactionId` is `{appointmentId}:{rescheduleCount}` on create.
+Event subject: `FPB consultation — {name}`. Body lists customer, email, phone, who the call is with, size, location, and customer notes, then links to `https://fpbcrm-alpha.vercel.app/leads/{id}` as “Open in FPB CRM”. It does not include a signed-record link or a reminder line. `showAs` is `busy`. The Outlook reminder is still 60 minutes before the start. `transactionId` is `{appointmentId}:{rescheduleCount}` on create.
 
 ## Gateway header vs API key
 
@@ -321,7 +324,28 @@ No API key. Rejected with `401` when the timestamp is missing, not a number/ISO 
 
 `type` may be `booking.created`, `booking.updated`, `booking.rescheduled`, or `booking.cancelled` (also `booking.canceled`). `status` `completed` or `no_show` records the outcome. `event_id` is stored in `booking_webhook_events`. A repeat of the same `event_id` returns `{ "ok": true, "duplicate": true }` and does not book again.
 
-Find order when the webhook is an update or cancel: `booking_id`, then `idempotency_key`, then `signed_record_id`, then the single scheduled appointment for that customer email. Created events use `idempotency_key`, else `signed_record_id`, else `event_id`, as the idempotency key. Intake is appended to lead notes once, marked `[booked-call:…]`. Blank building type, size, timeline, city, email, phone, owner, and source are filled; values a rep already entered are left alone. A matched lead is moved to stage `new` with `booked_call` true. `lead_source` is set to Booking Agent only when that field is empty.
+Find order when the webhook is an update or cancel: `booking_id`, then `idempotency_key`, then `signed_record_id`, then the single scheduled appointment for that customer email. Cancellation does not read the note marker. Created events use `idempotency_key`, else `signed_record_id`, else `event_id`, as the idempotency key.
+
+The shop-facing call note looks like this:
+
+```
+Booqer booking: Project consultation
+Wed, Oct 21, 1:30 PM EDT with Mathew
+Customer: Josh, 772-766-2433, josh@infocrg.com
+Project size: 16 x 37 approx.
+Location: 4290 5th St SW
+Notes: Gate code 1234
+Source: Booqer: ChatGPT
+View booking: https://booqer.ai/shops/florida-pole-barn/requests/…
+```
+
+Customer, size, location, and notes lines are omitted when those fields are empty. `consultation_call` is shown as “Project consultation”. The legal business name, brand, raw service key, and signed-record hash are not shown. `Source` is the same label stored on the lead (`source_label`, otherwise `Booqer` plus `consent_source` when that was sent).
+
+The note still ends with an HTML comment `<!-- [booked-call:…] -->`. `apply_booking_lead_patch` dedupes with `position(note_marker in notes)`, and that marker string is inside the comment, so a repeat does not append a second copy. Notes already saved with `[booked-call:…]` in plain text still match. The CRM hides the comment and a bare marker line. It does not rewrite stored notes.
+
+Optional webhook fields, accepted when present and not required: `channel`, `assistant`, `source_label`, `referrer_host`, `referrer_url`, `landing_page` (also `landing_url` or `landing`), `consent_source`, and `utm_source` / `utm_medium` / `utm_campaign` / `utm_term` / `utm_content`. They may be top-level or under `attribution`. `source_label` becomes `leads.source` and `leads.lead_source` when those are blank. `referrer_url` is stored as sent; if only `referrer_host` is sent, the lead stores `https://` plus that host. Landing page and UTM columns fill when blank. `channel` and `assistant` are kept on the appointment intake and do not replace `source_label`.
+
+Blank building type, size, timeline, city, email, phone, and owner are filled; values a rep already entered are left alone. A matched lead is moved to stage `new` with `booked_call` true.
 
 SEALD should retry with backoff on 5xx. 401 will not succeed on retry unless the signature or clock is fixed.
 
@@ -337,7 +361,7 @@ Database (after the manual SQL, not before):
 - [ ] Anon `select` on `appointments`, `team_members`, `team_blocks`, and `booking_webhook_events` returns no rows / permission denied.
 - [ ] A signed-in `@floridapolebarn.com` user can read them.
 - [ ] Booking the same instant twice for Mathew hits `slot_taken` or the exclusion constraint. The second customer is not given Mathew’s slot.
-- [ ] A lead linked by email moves to stage `new`, sets `booked_call`, keeps `quote_sent_at`, and keeps a `lead_source` that is already filled.
+- [ ] A lead linked by email moves to stage `new`, sets `booked_call`, keeps `quote_sent_at`, and keeps a `source` / `lead_source` that is already filled. A new lead’s source is the Booqer `source_label`, or `Booqer` when attribution is absent.
 - [ ] `leads.service_type` is unchanged. `appointments.service_type` is `consultation_call`.
 
 API (function deployed, key set, Microsoft secrets unset):

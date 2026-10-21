@@ -16,6 +16,7 @@ import PresenceBanner from '../components/PresenceBanner'
 import BookedCallPanel from '../components/BookedCallPanel'
 import { markBookedCallDone } from '../lib/markBookedCall'
 import { BOOKED_TILE } from '../lib/bookedCall'
+import { retainBookingMarkers, shopVisibleNote } from '../lib/sealdContract'
 
 const TEMP_MAP   = Object.fromEntries(TEMPERATURE.map(t => [t.id, t]))
 const TEMP_ICONS = { hot: '🔥', warm: '~', cold: '❄' }
@@ -353,14 +354,14 @@ function CompactInfo({ lead, scoreData, onStageChange, tempOpen, setTempOpen, on
       })()}
 
       {/* Notes */}
-      {lead.notes && (
+      {shopVisibleNote(lead.notes) && (
         <>
           {divider}
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 6 }}>
             Notes
           </div>
           <div style={{ fontSize: 12, color: 'var(--color-text-2)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-            {lead.notes}
+            {shopVisibleNote(lead.notes)}
           </div>
         </>
       )}
@@ -378,25 +379,26 @@ function ActivityEntry({ activity: a, onUpdate, onDelete }) {
   const [hovered,    setHovered]    = useState(false)
   const [editing,    setEditing]    = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const [editBody,   setEditBody]   = useState(a.body   || '')
+  const [editBody,   setEditBody]   = useState(() => shopVisibleNote(a.body || ''))
   const [editAuthor, setEditAuthor] = useState(a.author || '')
   const [saving,     setSaving]     = useState(false)
 
   const handleSave = async () => {
     if (!editBody.trim()) return
     setSaving(true)
+    const body = retainBookingMarkers(a.body, editBody).trim()
     const { error } = await supabase
       .from('activities')
-      .update({ body: editBody.trim(), author: editAuthor.trim() || null })
+      .update({ body, author: editAuthor.trim() || null })
       .eq('id', a.id)
     setSaving(false)
     if (error) { toast('Failed to update entry', 'error'); return }
-    onUpdate({ ...a, body: editBody.trim(), author: editAuthor.trim() || a.author })
+    onUpdate({ ...a, body, author: editAuthor.trim() || a.author })
     setEditing(false)
   }
 
   const handleCancelEdit = () => {
-    setEditBody(a.body || '')
+    setEditBody(shopVisibleNote(a.body || ''))
     setEditAuthor(a.author || '')
     setEditing(false)
   }
@@ -558,7 +560,7 @@ function ActivityEntry({ activity: a, onUpdate, onDelete }) {
         </>
       ) : (
         <div style={{ fontSize: 13, color: 'var(--color-text)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-          {a.body}
+          {shopVisibleNote(a.body)}
         </div>
       )}
     </div>
@@ -587,6 +589,10 @@ function EditForm({ form, set }) {
       onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
     />
   )
+
+  const sourceOptions = form.source && !LEAD_SOURCES.includes(form.source)
+    ? [form.source, ...LEAD_SOURCES]
+    : LEAD_SOURCES
 
   const sel = (key, options, placeholder) => (
     <select
@@ -622,7 +628,7 @@ function EditForm({ form, set }) {
         <div style={col}><label style={lbl}>Zip</label>{inp('zip')}</div>
       </div>
       <div style={grid2}>
-        <div style={col}><label style={lbl}>Lead Source</label>{sel('source', LEAD_SOURCES, 'Select source')}</div>
+        <div style={col}><label style={lbl}>Lead Source</label>{sel('source', sourceOptions, 'Select source')}</div>
         <div style={col}><label style={lbl}>Stage</label>{sel('stage', STAGES.map(s => ({ value: s.id, label: s.label })), 'Select stage')}</div>
       </div>
       <div style={grid2}>
@@ -749,8 +755,8 @@ function EditForm({ form, set }) {
         <div style={col}>
           <label style={lbl}>Notes</label>
           <textarea
-            value={form.notes || ''}
-            onChange={e => set('notes')(e.target.value)}
+            value={shopVisibleNote(form.notes || '')}
+            onChange={e => set('notes')(retainBookingMarkers(form.notes, e.target.value))}
             rows={4}
             style={{ ...fi, resize: 'vertical', lineHeight: 1.5 }}
             onFocus={e => e.target.style.borderColor = 'var(--color-accent)'}

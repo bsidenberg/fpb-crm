@@ -23,6 +23,8 @@ import {
   DEFAULT_SIGNATURE_HEADER,
   DEFAULT_SIGNED_TEMPLATE,
   DEFAULT_TIMESTAMP_HEADER,
+  bookingLeadSource,
+  bookingReferrerUrl,
   headerLookup,
   hmacSha256Hex,
   intakeNote,
@@ -306,8 +308,6 @@ async function syncOutlook(
       email: String(row.customer_email || ''),
       phone: String(row.customer_phone || ''),
       intake: (row.intake as Record<string, unknown> | null) || null,
-      sourceAgent: (row.source_agent as string | null) || null,
-      verificationUrl: (row.verification_url as string | null) || null,
       assignee: String(row.team_member_name || mailbox),
     })
     const attendees = outlookAttendees({
@@ -353,7 +353,14 @@ async function syncOutlook(
   }
 }
 
-function bookingRequest(parsed: ReturnType<typeof normalizeBookingBody>, candidateIds: string[], idempotencyKey: string, start: Date, end: Date) {
+function bookingRequest(
+  parsed: ReturnType<typeof normalizeBookingBody>,
+  candidateIds: string[],
+  idempotencyKey: string,
+  start: Date,
+  end: Date,
+  withName = '',
+) {
   return {
     idempotency_key: idempotencyKey,
     signed_record_id: parsed.signedRecordId || null,
@@ -374,9 +381,18 @@ function bookingRequest(parsed: ReturnType<typeof normalizeBookingBody>, candida
     verification_url: parsed.verificationUrl || null,
     service_type: parsed.serviceType || 'consultation_call',
     customer_invite: parsed.customerInvite !== false,
+    // Appointment origin. The shop-facing lead source is lead_source below.
     source: 'seald',
+    lead_source: bookingLeadSource(parsed),
+    referrer_url: bookingReferrerUrl(parsed) || null,
+    landing_page: parsed.landingPage || null,
+    utm_source: parsed.utmSource || null,
+    utm_medium: parsed.utmMedium || null,
+    utm_campaign: parsed.utmCampaign || null,
+    utm_term: parsed.utmTerm || null,
+    utm_content: parsed.utmContent || null,
     timezone: BUSINESS_TZ,
-    note: intakeNote(parsed, formatCallWhen(start)),
+    note: intakeNote(parsed, formatCallWhen(start), { withName }),
     note_marker: noteMarker(parsed),
   }
 }
@@ -512,8 +528,16 @@ async function handleCreate(req: Request, db: SupabaseClient, staff: boolean) {
   if (picked.candidateIds.length === 0) {
     return json({ error: 'slot_taken', message: 'That time is no longer available.' }, 409)
   }
+  const assignee = picked.members.find(member => member.id === picked.candidateIds[0])
   const { data, error } = await db.rpc('book_consultation', {
-    p_request: bookingRequest(parsed, picked.candidateIds, idem, range.start, range.end),
+    p_request: bookingRequest(
+      parsed,
+      picked.candidateIds,
+      idem,
+      range.start,
+      range.end,
+      assignee?.display_name || '',
+    ),
   })
   if (error) return rpcFailure(error)
   const row = data as Record<string, unknown>
