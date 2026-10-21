@@ -176,6 +176,22 @@ function label(value) {
   return text(value)
 }
 
+function firstText(...values) {
+  for (const value of values) {
+    const cleaned = text(value)
+    if (cleaned) return cleaned
+  }
+  return ''
+}
+
+function firstLabel(...values) {
+  for (const value of values) {
+    const cleaned = label(value)
+    if (cleaned) return cleaned
+  }
+  return ''
+}
+
 // v1 intake is { answers: [{key, value}] }; flatten to an object.
 function answersObject(intake) {
   const out = {}
@@ -279,6 +295,16 @@ export function normalizeBookingBody(body) {
   const city = cleanCity(text(intake.city || src.city || customer.city)) ||
     cityFromAddress(address) ||
     cityFromLocation(location)
+  const attribution = nested(src, 'attribution')
+  const utm = { ...nested(attribution, 'utm'), ...nested(src, 'utm') }
+  const asNote = value => (typeof value === 'string' || typeof value === 'number') ? text(value) : ''
+  const customerNotes = [...new Set([
+    asNote(intake.notes),
+    asNote(intake.customer_notes || intake.customerNotes),
+    asNote(intake.description),
+    asNote(src.notes),
+    asNote(customer.notes),
+  ].filter(Boolean))].join('\n')
   return {
     bookingId: text(src.booking_id || src.appointment_id || src.bookingId),
     idempotencyKey: text(src.idempotency_key || src.idempotencyKey),
@@ -294,6 +320,25 @@ export function normalizeBookingBody(body) {
     business: label(src.business),
     brand: label(src.brand),
     sourceAgent: label(src.source_agent || src.sourceAgent || src.agent),
+    channel: firstLabel(src.channel, attribution.channel, intake.channel),
+    assistant: firstLabel(src.assistant, attribution.assistant, intake.assistant),
+    sourceLabel: firstLabel(
+      src.source_label, src.sourceLabel, attribution.source_label, attribution.sourceLabel, intake.source_label,
+    ),
+    referrerHost: firstText(src.referrer_host, src.referrerHost, attribution.referrer_host, intake.referrer_host),
+    referrerUrl: firstText(src.referrer_url, src.referrerUrl, attribution.referrer_url, intake.referrer_url),
+    landingPage: firstText(
+      src.landing_page, src.landingPage, src.landing_url, src.landingUrl, src.landing,
+      attribution.landing_page, attribution.landing_url, attribution.landing, intake.landing_page,
+    ),
+    consentSource: firstText(
+      src.consent_source, src.consentSource, attribution.consent_source, customer.consent_source, intake.consent_source,
+    ),
+    utmSource: firstText(src.utm_source, src.utmSource, utm.source, utm.utm_source, attribution.utm_source, intake.utm_source),
+    utmMedium: firstText(src.utm_medium, src.utmMedium, utm.medium, utm.utm_medium, attribution.utm_medium, intake.utm_medium),
+    utmCampaign: firstText(src.utm_campaign, src.utmCampaign, utm.campaign, utm.utm_campaign, attribution.utm_campaign, intake.utm_campaign),
+    utmTerm: firstText(src.utm_term, src.utmTerm, utm.term, utm.utm_term, attribution.utm_term, intake.utm_term),
+    utmContent: firstText(src.utm_content, src.utmContent, utm.content, utm.utm_content, attribution.utm_content, intake.utm_content),
     start: text(schedule.start || src.start || src.starts_at),
     end: text(schedule.end || src.end || src.ends_at),
     timezone: text(schedule.timezone || src.timezone) || 'America/New_York',
@@ -313,6 +358,16 @@ export function normalizeBookingBody(body) {
       address,
       city,
       description: text(intake.description),
+      notes: customerNotes,
+      channel: firstLabel(src.channel, attribution.channel, intake.channel),
+      assistant: firstLabel(src.assistant, attribution.assistant, intake.assistant),
+      source_label: firstLabel(
+        src.source_label, src.sourceLabel, attribution.source_label, attribution.sourceLabel, intake.source_label,
+      ),
+      referrer_host: firstText(src.referrer_host, src.referrerHost, attribution.referrer_host, intake.referrer_host),
+      consent_source: firstText(
+        src.consent_source, src.consentSource, attribution.consent_source, customer.consent_source, intake.consent_source,
+      ),
     },
   }
 }
@@ -331,28 +386,114 @@ export function statusFromEvent(parsed) {
 }
 
 const MARKER_PREFIX = '[booked-call:'
+const MARKER_RE = /\[booked-call:[^\]]+\]/g
+
+const SERVICE_LABELS = {
+  consultation_call: 'Project consultation',
+}
+
+const CONSENT_LABELS = {
+  web: 'Website',
+  website: 'Website',
+  mcp: 'AI assistant',
+  api: 'API',
+}
 
 export function noteMarker(parsed) {
   return `${MARKER_PREFIX}${parsed.signedRecordId || parsed.idempotencyKey || parsed.eventId || 'new'}]`
 }
 
-export function intakeNote(parsed, whenLabel) {
+export function bookingServiceLabel(serviceType) {
+  const key = text(serviceType)
+  if (!key || SERVICE_LABELS[key]) return SERVICE_LABELS[key] || 'Project consultation'
+  return key.replace(/[_-]+/g, ' ').replace(/\b[a-z]/g, char => char.toUpperCase())
+}
+
+/**
+ * Lead source written for a booking. Booqer's source_label wins. Otherwise
+ * "Booqer", plus consent_source when that field is present.
+ */
+export function bookingLeadSource(parsed) {
+  const label = text(parsed?.sourceLabel)
+  if (label) return label
+  const consent = text(parsed?.consentSource)
+  if (!consent) return 'Booqer'
+  const mapped = CONSENT_LABELS[consent.toLowerCase()]
+  return `Booqer: ${mapped || consent}`
+}
+
+/** referrer_url, or https:// plus referrer_host when only the host was sent. */
+export function bookingReferrerUrl(parsed) {
+  const url = text(parsed?.referrerUrl)
+  if (url) return url
+  const host = text(parsed?.referrerHost)
+  if (!host) return ''
+  if (/^https?:\/\//i.test(host)) return host
+  return `https://${host.replace(/^\/+/, '')}`
+}
+
+export function intakeNote(parsed, whenLabel, options = {}) {
+  const withName = text(options.withName || options.owner || '')
+  const when = text(whenLabel)
+  const whenLine = [when, withName ? `with ${withName}` : ''].filter(Boolean).join(' ')
+  const customer = [parsed.customer?.name, parsed.customer?.phone, parsed.customer?.email].map(text).filter(Boolean)
+  const notes = text(parsed.intake?.notes)
   const lines = [
-    noteMarker(parsed),
-    `Booked consultation${whenLabel ? ` ${whenLabel}` : ''}`,
-    parsed.sourceAgent ? `Source agent: ${parsed.sourceAgent}` : '',
-    parsed.serviceType ? `Service: ${parsed.serviceType}` : '',
-    parsed.business ? `Business: ${parsed.business}` : '',
-    parsed.brand ? `Brand: ${parsed.brand}` : '',
-    parsed.intake.building_type ? `Building type: ${parsed.intake.building_type}` : '',
-    parsed.intake.size ? `Size: ${parsed.intake.size}` : '',
-    parsed.intake.location ? `Location: ${parsed.intake.location}` : '',
-    parsed.intake.timeline ? `Timeline: ${parsed.intake.timeline}` : '',
-    parsed.intake.description ? `Description: ${parsed.intake.description}` : '',
-    parsed.signedRecordId ? `Signed record: ${parsed.signedRecordId}` : '',
-    parsed.verificationUrl ? `Verification: ${parsed.verificationUrl}` : '',
+    `Booqer booking: ${bookingServiceLabel(parsed.serviceType)}`,
+    whenLine,
+    customer.length ? `Customer: ${customer.join(', ')}` : '',
+    parsed.intake?.size ? `Project size: ${parsed.intake.size}` : '',
+    parsed.intake?.location ? `Location: ${parsed.intake.location}` : '',
+    notes ? `Notes: ${notes}` : '',
+    `Source: ${bookingLeadSource(parsed)}`,
+    parsed.verificationUrl ? `View booking: ${parsed.verificationUrl}` : '',
+    // Hidden from the shop. SQL and planLeadWrite match this exact string,
+    // including notes that already store it in plain text.
+    `<!-- ${noteMarker(parsed)} -->`,
   ].filter(Boolean)
   return lines.join('\n')
+}
+
+/** Marker tokens already stored on a note, in first-seen order. */
+export function bookingMarkers(value) {
+  const found = []
+  const re = new RegExp(MARKER_RE.source, 'g')
+  let match
+  const source = String(value ?? '')
+  while ((match = re.exec(source))) {
+    if (!found.includes(match[0])) found.push(match[0])
+  }
+  return found
+}
+
+/**
+ * Shop-facing note. Drops the dedupe marker (plain line or HTML comment)
+ * and the booking lines that are not job details. Rep notes that are not
+ * a booked-call entry are left alone, aside from a bare marker line.
+ */
+export function shopVisibleNote(value) {
+  const raw = String(value ?? '')
+  const booking = raw.includes(MARKER_PREFIX)
+  const withoutComment = raw.replace(/[ \t]*<!--\s*\[booked-call:[^\]]*\]\s*-->[ \t]*/g, '')
+  const lines = withoutComment.split('\n').flatMap(line => {
+    const trimmed = line.trim()
+    if (/^\[booked-call:[^\]]+\]$/.test(trimmed)) return []
+    if (!booking) return [line]
+    if (/^(?:service|business|brand|signed record|source agent):/i.test(trimmed)) return []
+    let next = line.replace(/^(\s*)Verification:/i, '$1View booking:')
+    next = next.replace(/^(\s*)Size:/i, '$1Project size:')
+    return [next]
+  })
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/** Keep dedupe markers when a rep edits the visible note text. */
+export function retainBookingMarkers(stored, visible) {
+  let next = String(visible ?? '').replace(/\s+$/, '')
+  for (const marker of bookingMarkers(stored)) {
+    if (!next.includes(marker)) next = `${next}${next ? '\n' : ''}<!-- ${marker} -->`
+  }
+  return next
 }
 
 function blank(value) {
@@ -361,17 +502,20 @@ function blank(value) {
 
 /**
  * Fields written onto a lead. Every booking, including a match on an
- * existing lead, sets stage to 'new' and booked_call. lead_source becomes
- * Booking Agent only when it is blank. Never includes stage_changed_at or
- * quote_sent_at (the database function stamps stage_changed_at when the
- * stage actually changes). Does not overwrite a rep's existing kit/building
- * fields. consultation_call stays on the appointment, not leads.service_type.
+ * existing lead, sets stage to 'new' and booked_call. source and
+ * lead_source become the Booqer attribution label only when blank.
+ * referrer, landing page, and UTM fields fill the same way. Never includes
+ * stage_changed_at or quote_sent_at (the database function stamps
+ * stage_changed_at when the stage actually changes). Does not overwrite a
+ * rep's existing kit/building fields. consultation_call stays on the
+ * appointment, not leads.service_type.
  */
 export function planLeadWrite(existing, parsed, { owner, whenLabel } = {}) {
-  const note = intakeNote(parsed, whenLabel)
+  const note = intakeNote(parsed, whenLabel, { withName: owner })
   const marker = noteMarker(parsed)
   const create = !existing
   const patch = { booked_call: true, stage: 'new' }
+  const leadSource = bookingLeadSource(parsed)
   const fill = (column, value) => {
     if (blank(value)) return
     if (create || blank(existing[column])) patch[column] = value
@@ -384,8 +528,15 @@ export function planLeadWrite(existing, parsed, { owner, whenLabel } = {}) {
   fill('email', parsed.customer.email)
   fill('phone', parsed.customer.phone)
   fill('owner', owner)
-  if (create || blank(existing.source)) patch.source = BOOKING_SOURCE
-  if (create || blank(existing.lead_source)) patch.lead_source = BOOKING_SOURCE
+  fill('referrer_url', bookingReferrerUrl(parsed))
+  fill('landing_page', parsed.landingPage)
+  fill('utm_source', parsed.utmSource)
+  fill('utm_medium', parsed.utmMedium)
+  fill('utm_campaign', parsed.utmCampaign)
+  fill('utm_term', parsed.utmTerm)
+  fill('utm_content', parsed.utmContent)
+  if (create || blank(existing.source)) patch.source = leadSource
+  if (create || blank(existing.lead_source)) patch.lead_source = leadSource
   if (create) {
     patch.first_name = parsed.customer.first_name
     patch.last_name = parsed.customer.last_name

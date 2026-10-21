@@ -125,6 +125,20 @@ test('blank or unknown with no signals is Direct; capture method with no signals
   assert.equal(normalizeSource({ source: 'not a real channel' }), 'Other')
 })
 
+test('Booqer attribution labels stay as sent', () => {
+  assert.equal(normalizeSource({ source: 'Booqer' }), 'Booqer')
+  assert.equal(normalizeSource({
+    source: 'Booqer: ChatGPT',
+    utm_source: 'chatgpt',
+    gclid: 'abc',
+  }), 'Booqer: ChatGPT')
+  assert.equal(normalizeSource({
+    source: 'Booqer: Website, referred by floridapolebarn.com',
+    referrer_url: 'https://floridapolebarn.com/',
+  }), 'Booqer: Website, referred by floridapolebarn.com')
+  assert.equal(normalizeSource('Booqer: API'), 'Booqer: API')
+})
+
 test('lead_source fills in when source is a capture method', () => {
   assert.equal(normalizeSource({
     source: 'Website Form',

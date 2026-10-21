@@ -176,6 +176,11 @@ function isExactCanonical(value) {
   return CANONICAL.has(text(value))
 }
 
+/** Booqer attribution is stored as sent ("Booqer: ChatGPT"), not reclassified. */
+function isBooqerLabel(value) {
+  return /^booqer(\s|:|$)/i.test(text(value))
+}
+
 function isCapture(value) {
   return CAPTURE_KEYS.has(normKey(value))
 }
@@ -329,13 +334,13 @@ export function normalizeSource(input) {
   if (input != null && typeof input === 'object') return normalizeLead(input)
 
   const raw = text(input)
-  if (isExactCanonical(raw)) return raw
+  if (isExactCanonical(raw) || isBooqerLabel(raw)) return raw
   return aliasChannel(raw) || fallbackChannel(raw)
 }
 
 function normalizeLead(lead) {
   const raw = text(lead.source)
-  if (isExactCanonical(raw)) return raw
+  if (isExactCanonical(raw) || isBooqerLabel(raw)) return raw
 
   if (text(lead.gclid)) return 'Google Ads'
   if (text(lead.fbclid)) return 'Meta Ads'

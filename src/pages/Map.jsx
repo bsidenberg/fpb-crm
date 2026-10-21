@@ -8,6 +8,7 @@ import { STAGES } from '../lib/stages'
 import DistanceFilterButton from '../components/DistanceFilterButton'
 import { geocodeAddress } from '../lib/geocode'
 import { haversineMiles } from '../lib/haversine'
+import { shopVisibleNote } from '../lib/sealdContract'
 
 const GOOGLE_MAPS_LIBRARIES = []
 const STAGE_COLORS = Object.fromEntries(STAGES.map(s => [s.id, s.color]))
@@ -512,10 +513,10 @@ export default function Map() {
                             <div style={{ color: 'var(--color-text)' }}>{formatDate(selectedLead.follow_up_date)}</div>
                           </div>
                         )}
-                        {selectedLead.notes && (
+                        {shopVisibleNote(selectedLead.notes) && (
                           <div>
                             <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Notes</div>
-                            <div style={{ color: 'var(--color-text-3)', fontSize: 12, lineHeight: 1.5, fontStyle: 'italic' }}>{selectedLead.notes}</div>
+                            <div style={{ color: 'var(--color-text-3)', fontSize: 12, lineHeight: 1.5, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{shopVisibleNote(selectedLead.notes)}</div>
                           </div>
                         )}
                       </div>

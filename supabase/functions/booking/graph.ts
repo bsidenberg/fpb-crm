@@ -3,6 +3,7 @@
 // treat the integration as not configured and still keep the CRM booking.
 
 import { formatWallClock, parseGraphDate, BUSINESS_TZ } from '../_shared/bookingSlots.js'
+import { calendarInviteContent } from '../_shared/calendarInvite.js'
 
 const BUSY = new Set(['busy', 'oof', 'tentative', 'workingelsewhere'])
 export const REMINDER_MINUTES = 60
@@ -92,12 +93,6 @@ export async function getSchedule(
   return out
 }
 
-function esc(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 export async function createEvent(cfg: GraphConfig, mailbox: string, event: Record<string, unknown>) {
   const res = await graph(cfg, `/users/${encodeURIComponent(mailbox)}/events`, {
     method: 'POST',
@@ -141,29 +136,7 @@ export function eventContent(input: {
   email?: string
   phone?: string
   intake?: Record<string, unknown> | null
-  sourceAgent?: string | null
-  verificationUrl?: string | null
   assignee?: string
 }) {
-  const crm = `https://fpbcrm-alpha.vercel.app/leads/${encodeURIComponent(input.leadId)}`
-  const intake = input.intake || {}
-  const rows = [
-    ['Customer', input.name],
-    ['Email', input.email || ''],
-    ['Phone', input.phone || ''],
-    ['With', input.assignee || ''],
-    ['Building', intake.building_type],
-    ['Size', intake.size],
-    ['Location', intake.location],
-    ['Timeline', intake.timeline],
-    ['Source agent', input.sourceAgent || ''],
-  ].filter(([, value]) => value)
-  const list = rows.map(([label, value]) => `<div><strong>${esc(label)}:</strong> ${esc(value)}</div>`).join('')
-  const verify = input.verificationUrl
-    ? `<div><a href="${esc(input.verificationUrl)}">Signed record</a></div>`
-    : ''
-  return {
-    subject: `FPB consultation — ${input.name || 'New lead'}`,
-    html: `<div>${list}<div><a href="${esc(crm)}">Open in FPB CRM</a></div>${verify}<div>Reminder is ${REMINDER_MINUTES} minutes before the call. SEALD does not send a separate reminder.</div></div>`,
-  }
+  return calendarInviteContent(input)
 }
